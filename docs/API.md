@@ -96,7 +96,8 @@ All project routes require a user and enforce `owner_id`.
 - `GET /api/v1/projects` — up to 200 projects → `{ projects }`
 - `GET /api/v1/projects/:id` — project plus 20 recent jobs
 - `PATCH /api/v1/projects/:id` — `{ name?, description? }`, at least one field
-- `DELETE /api/v1/projects/:id` — cascades jobs, findings, artifacts metadata
+- `DELETE /api/v1/projects/:id` — cascades jobs, findings, and artifact
+  metadata, then best-effort deletes the stored artifact objects
 
 ## Targets
 
@@ -278,6 +279,7 @@ Durable Postgres buckets, keyed by user (or IP for unauthenticated pairing):
 | `companions:pairing` | 5 / 10 min |
 | `companion:pair` | 10 / min |
 | `projects:create` | 30 / min |
+| `projects:delete` | 10 / min |
 | `targets:create` | 60 / min |
 | `jobs:create` | 30 / min |
 | `ai:chat` | 20 / hour |

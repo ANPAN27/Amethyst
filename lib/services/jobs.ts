@@ -1,4 +1,3 @@
-import type { z } from "zod";
 import type { WORKFLOWS } from "@/lib/validation/schemas";
 
 export type Workflow = (typeof WORKFLOWS)[number];
@@ -21,36 +20,5 @@ export function workflowMatchesTargetKind(workflow: Workflow, targetKind: string
   return TARGET_KIND_BY_WORKFLOW[workflow] === targetKind;
 }
 
-export type PublicJob = {
-  id: string;
-  project_id: string;
-  companion_id: string | null;
-  target_id: string | null;
-  workflow: Workflow;
-  status: string;
-  progress: number;
-  error_code: string | null;
-  error_message: string | null;
-  result_summary: unknown;
-  created_at: string;
-  claimed_at: string | null;
-  started_at: string | null;
-  finished_at: string | null;
-};
-
 export const PUBLIC_JOB_FIELDS =
   "id, project_id, companion_id, target_id, workflow, status, progress, error_code, error_message, result_summary, created_at, claimed_at, started_at, finished_at";
-
-export type FindingRow = {
-  id: string;
-  class: string;
-  category: string | null;
-  title: string;
-  detail: string | null;
-  confidence: number | null;
-  evidence: unknown;
-};
-
-export type JobResultPayload = z.infer<
-  typeof import("@/lib/validation/schemas").jobResultSchema
->;

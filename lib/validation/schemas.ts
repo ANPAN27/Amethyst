@@ -151,7 +151,7 @@ export const exchangePairingCodeSchema = z.object({
   name: trimmed(120),
   platform: z.string().trim().max(120).optional(),
   version: z.string().trim().max(60).optional(),
-  capabilities: z.array(z.string().trim().max(80)).max(50).optional(),
+  capabilities: z.array(workflowSchema).max(WORKFLOWS.length).optional(),
 });
 
 export const aiChatSchema = z.object({
@@ -172,8 +172,4 @@ export const graphQuerySchema = z.object({
 
 export const checkoutSchema = z.object({
   product_id: trimmed(200),
-});
-
-export const artifactUploadSchema = z.object({
-  content_type: z.literal("application/json").default("application/json"),
 });

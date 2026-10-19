@@ -45,7 +45,7 @@ Copy `.env.example` and fill in:
 | `NEXT_PUBLIC_SUPABASE_URL` | yes | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Public anon/publishable key |
 | `SUPABASE_SERVICE_ROLE_KEY` | yes | Server only; never expose |
-| `APP_URL` | yes in production | Origin used for Dodo return/cancel URLs |
+| `APP_URL` | yes in production | Origin used for Dodo return/cancel URLs. Falls back to `VERCEL_PROJECT_PRODUCTION_URL`/`VERCEL_URL` on Vercel |
 | `PAIRING_CODE_SECRET` | yes | HMAC key, 32+ random bytes |
 | `COMPANION_TOKEN_SECRET` | yes | Different HMAC key |
 | `ARTIFACT_BUCKET` | no | Default `analysis-artifacts` |

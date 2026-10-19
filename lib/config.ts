@@ -31,7 +31,15 @@ export const publicConfig = {
     return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
   },
   get appUrl() {
-    return optional("APP_URL") ?? "http://localhost:3000";
+    const explicit = optional("APP_URL");
+    if (explicit) return explicit;
+
+    const vercel =
+      optional("VERCEL_PROJECT_PRODUCTION_URL") ?? optional("VERCEL_URL");
+    if (vercel) return vercel.startsWith("http") ? vercel : `https://${vercel}`;
+
+    if (process.env.NODE_ENV !== "production") return "http://localhost:3000";
+    throw new Error("Missing required server configuration: APP_URL");
   },
 };
 
