@@ -107,6 +107,7 @@ function normalizeEvidenceGraph(workflow: WorkflowName, raw: unknown): Normalize
   const entities: Entity[] = [];
   const findings: Finding[] = [];
   const idByNode = new Map<string, string>();
+  const seenNodeIds = new Set<string>();
 
   for (const rawNode of graph.nodes) {
     if (entities.length >= MAX_ENTITIES) break;
@@ -114,14 +115,16 @@ function normalizeEvidenceGraph(workflow: WorkflowName, raw: unknown): Normalize
 
     const identity = isRecord(rawNode.identity) ? rawNode.identity : {};
     const props = observationProperties(rawNode);
-    const nodeId =
+    const rawNodeId =
       firstString(rawNode, ["node_id", "id"]) ??
       firstString(identity, ["key", "sha256"]) ??
       null;
-    if (!nodeId || idByNode.has(nodeId)) continue;
+    if (!rawNodeId || idByNode.has(rawNodeId)) continue;
+    const nodeId = clip(rawNodeId, 300);
+    if (seenNodeIds.has(nodeId)) continue;
+    seenNodeIds.add(nodeId);
 
-    const type =
-      firstString(rawNode, ["kind", "type", "entity_type"]) ?? "entity";
+    const type = clip(firstString(rawNode, ["kind", "type", "entity_type"]) ?? "entity", 80);
     const semanticRole = firstString(props, ["semantic_role"]);
     const modulePath = firstString(props, ["module_path"]);
     const exportedName = firstString(props, ["exported_name"]);
@@ -136,7 +139,7 @@ function normalizeEvidenceGraph(workflow: WorkflowName, raw: unknown): Normalize
       firstString(identity, ["key", "sha256"]) ??
       nodeId;
 
-    idByNode.set(nodeId, nodeId);
+    idByNode.set(rawNodeId, nodeId);
     entities.push({
       id: nodeId,
       type,
@@ -196,12 +199,17 @@ function normalizeEvidenceGraph(workflow: WorkflowName, raw: unknown): Normalize
     if (edges.length >= MAX_EDGES) break;
     if (!isRecord(rawEdge)) continue;
 
-    const from = firstString(rawEdge, ["source_node_id", "source", "from"]);
-    const to = firstString(rawEdge, ["target_node_id", "target", "to"]);
-    if (!from || !to || !idByNode.has(from) || !idByNode.has(to)) continue;
+    const fromId = firstString(rawEdge, ["source_node_id", "source", "from"]);
+    const toId = firstString(rawEdge, ["target_node_id", "target", "to"]);
+    if (!fromId || !toId) continue;
+    const from = idByNode.get(fromId);
+    const to = idByNode.get(toId);
+    if (!from || !to) continue;
 
-    const type =
-      firstString(rawEdge, ["relation", "type", "kind", "label"]) ?? "RELATED_TO";
+    const type = clip(
+      firstString(rawEdge, ["relation", "type", "kind", "label"]) ?? "RELATED_TO",
+      80,
+    );
     const key = `${from}\u0000${to}\u0000${type}`;
     if (seenEdges.has(key)) continue;
     seenEdges.add(key);
@@ -262,26 +270,30 @@ function normalizeModules(raw: unknown): Normalized {
 
   const entities: Entity[] = [];
   const entityIds = new Set<string>();
+  const idByOriginal = new Map<string, string>();
   const findings: Finding[] = [];
 
   for (const item of modules) {
     if (entities.length >= MAX_ENTITIES) break;
 
-    let id: string | null = null;
+    let rawId: string | null = null;
     let label: string | null = null;
     let nestedImports: unknown[] = [];
 
     if (typeof item === "string") {
-      id = item;
+      rawId = item;
     } else if (isRecord(item)) {
-      id = firstString(item, ["path", "relative_path", "file", "name", "id"]);
+      rawId = firstString(item, ["path", "relative_path", "file", "name", "id"]);
       label = firstString(item, ["path", "relative_path", "file", "name"]);
       nestedImports = asArray(item.imports);
     }
 
+    const id = rawId ? clip(rawId, 300) : null;
     if (!id || entityIds.has(id)) continue;
     entityIds.add(id);
-    entities.push({ id, type: "module", label: label ?? id });
+    if (rawId) idByOriginal.set(rawId, id);
+    idByOriginal.set(id, id);
+    entities.push({ id, type: "module", label: label ? clip(label, 300) : id });
 
     if (findings.length < MAX_FINDINGS - 1) {
       findings.push({
@@ -311,11 +323,14 @@ function normalizeModules(raw: unknown): Normalized {
     if (edges.length >= MAX_EDGES) break;
     if (!isRecord(item)) continue;
 
-    const from = firstString(item, ["from", "source", "importer", "module"]);
-    const to = firstString(item, ["to", "target", "imported", "dependency", "path"]);
-    if (!from || !to || !entityIds.has(from) || !entityIds.has(to)) continue;
+    const fromId = firstString(item, ["from", "source", "importer", "module"]);
+    const toId = firstString(item, ["to", "target", "imported", "dependency", "path"]);
+    if (!fromId || !toId) continue;
+    const from = idByOriginal.get(fromId);
+    const to = idByOriginal.get(toId);
+    if (!from || !to) continue;
 
-    const type = firstString(item, ["type", "relation", "kind"]) ?? "IMPORTS";
+    const type = clip(firstString(item, ["type", "relation", "kind"]) ?? "IMPORTS", 80);
     const key = `${from}\u0000${to}\u0000${type}`;
     if (seenEdges.has(key)) continue;
     seenEdges.add(key);
@@ -363,10 +378,12 @@ function normalizeTables(raw: unknown): Normalized {
         : isRecord(table)
           ? firstString(table, ["name", "table_name", "id"])
           : null;
-    if (!name || seen.has(name)) continue;
+    if (!name) continue;
+    const id = clip(name, 300);
+    if (seen.has(id)) continue;
     if (entities.length >= MAX_ENTITIES) break;
-    seen.add(name);
-    entities.push({ id: name, type: "table", label: name });
+    seen.add(id);
+    entities.push({ id, type: "table", label: clip(name, 300) });
     findings.push({
       class: "observed",
       category: "table",
@@ -415,10 +432,12 @@ function normalizeDependencies(workflow: WorkflowName, raw: unknown): Normalized
         : isRecord(pkg)
           ? firstString(pkg, ["name", "path", "module", "package"])
           : null;
-    if (!name || seen.has(name)) continue;
+    if (!name) continue;
+    const id = clip(name, 300);
+    if (seen.has(id)) continue;
     if (entities.length >= MAX_ENTITIES) break;
-    seen.add(name);
-    entities.push({ id: name, type: "dependency", label: name });
+    seen.add(id);
+    entities.push({ id, type: "dependency", label: clip(name, 300) });
     if (findings.length < MAX_FINDINGS - 1) {
       findings.push({
         class: "observed",
@@ -468,10 +487,12 @@ function normalizeTypes(raw: unknown): Normalized {
       : typeof type === "string"
         ? type
         : null;
-    if (!name || seen.has(name)) continue;
+    if (!name) continue;
+    const id = clip(name, 300);
+    if (seen.has(id)) continue;
     if (entities.length >= MAX_ENTITIES) break;
-    seen.add(name);
-    entities.push({ id: name, type: "type", label: name });
+    seen.add(id);
+    entities.push({ id, type: "type", label: clip(name, 300) });
     if (findings.length < MAX_FINDINGS - 1) {
       findings.push({
         class: "observed",

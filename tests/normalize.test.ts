@@ -117,6 +117,37 @@ describe("normalizeReaOutput evidence envelopes", () => {
     expect(result.findings.some((finding) => finding.title.includes("Module: src/a.js"))).toBe(true);
   });
 
+  it("keeps identifiers and relationship references inside server limits", () => {
+    const longId = "a".repeat(400);
+    const otherId = "b".repeat(400);
+    const result = normalizeReaOutput("analyze_javascript_application", {
+      normalized_result: {
+        graph: {
+          nodes: [
+            { node_id: longId, kind: "javascript-module", observations: [] },
+            { node_id: otherId, kind: "javascript-module", observations: [] },
+          ],
+          edges: [
+            {
+              source_node_id: longId,
+              target_node_id: otherId,
+              relation: "r".repeat(120),
+            },
+          ],
+        },
+      },
+    });
+
+    expect(result.graph.entities).toHaveLength(2);
+    expect(result.graph.entities.every((entity) => entity.id.length === 300)).toBe(true);
+    expect(result.graph.edges).toHaveLength(1);
+    expect(result.graph.edges[0]?.from).toHaveLength(300);
+    expect(result.graph.edges[0]?.from.startsWith("a".repeat(299))).toBe(true);
+    expect(result.graph.edges[0]?.to).toHaveLength(300);
+    expect(result.graph.edges[0]?.to.startsWith("b".repeat(299))).toBe(true);
+    expect(result.graph.edges[0]?.type).toHaveLength(80);
+  });
+
   it("does not invent entities when an envelope has no graph", () => {
     const result = normalizeReaOutput("analyze_javascript_application", {
       normalized_result: { summary: { anything: true } },

@@ -19,6 +19,12 @@ export function normalizeServerUrl(value: string): string {
   if (url.protocol !== "https:" && url.protocol !== "http:") {
     throw new Error("Server URL must use http or https");
   }
+  if (url.username || url.password) {
+    throw new Error("Server URL must not contain embedded credentials");
+  }
+  if (url.search || url.hash) {
+    throw new Error("Server URL must not contain a query or fragment");
+  }
   const isLocal = ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
   if (url.protocol === "http:" && !isLocal && process.env.AMETHYST_ALLOW_INSECURE_HTTP !== "1") {
     throw new Error("Refusing plaintext HTTP for a non-local server. Use HTTPS.");
@@ -55,6 +61,7 @@ export class ApiClient {
       response = await fetch(`${this.baseUrl}${path}`, {
         ...init,
         headers,
+        redirect: "error",
         signal: AbortSignal.timeout(timeoutMs),
       });
     } catch {
@@ -141,6 +148,7 @@ export class ApiClient {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: new Uint8Array(body),
+        redirect: "error",
         signal: AbortSignal.timeout(120_000),
       });
     } catch {

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { approveTarget, validateTargetPath } from "../companion/src/approval";
+import { normalizeServerUrl } from "../companion/src/api";
 import { buildReaArgs } from "../companion/src/process";
 
 const created: string[] = [];
@@ -51,5 +52,17 @@ describe("REA command construction", () => {
     expect(args).not.toContain("--detail");
     expect(args).not.toContain("--type");
     expect(args).not.toContain("--table");
+  });
+});
+
+describe("companion server URL validation", () => {
+  it("requires HTTPS for non-local servers", () => {
+    expect(() => normalizeServerUrl("http://example.com")).toThrow(/HTTPS/);
+    expect(normalizeServerUrl("http://localhost:3000/")).toBe("http://localhost:3000");
+  });
+
+  it("rejects embedded credentials and query strings", () => {
+    expect(() => normalizeServerUrl("https://user:pass@example.com")).toThrow(/credentials/);
+    expect(() => normalizeServerUrl("https://example.com/?token=1")).toThrow(/query/);
   });
 });
