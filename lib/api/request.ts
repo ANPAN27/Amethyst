@@ -19,14 +19,55 @@ export async function parseJson<T extends z.ZodTypeAny>(
     throw new ApiError(415, "invalid_request", "Content-Type must be application/json");
   }
 
+  let raw: string;
+  try {
+    raw = await readLimitedText(request, maxBytes);
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(400, "invalid_request", "Unable to read request body");
+  }
+
   let body: unknown;
   try {
-    body = await request.json();
+    body = JSON.parse(raw);
   } catch {
     throw new ApiError(400, "invalid_request", "Malformed JSON body");
   }
 
   return schema.parse(body);
+}
+
+async function readLimitedText(request: NextRequest, maxBytes: number): Promise<string> {
+  const stream = request.body;
+  if (!stream) return "";
+
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new ApiError(413, "invalid_request", "Request body is too large");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return new TextDecoder("utf-8", { fatal: true }).decode(merged);
 }
 
 export function parseUuid(value: string, field = "id"): string {
@@ -37,17 +78,20 @@ export function parseUuid(value: string, field = "id"): string {
   return parsed.data;
 }
 
-export function getPagination(searchParams: URLSearchParams, defaultLimit = 50, maxLimit = 200) {
-  const limitRaw = searchParams.get("limit");
-  const offsetRaw = searchParams.get("offset");
-  const limit = limitRaw ? Number.parseInt(limitRaw, 10) : defaultLimit;
-  const offset = offsetRaw ? Number.parseInt(offsetRaw, 10) : 0;
+function integerParam(raw: string | null, field: string, min: number, max: number): number | null {
+  if (raw === null) return null;
+  if (!/^\d+$/.test(raw)) {
+    throw new ApiError(400, "invalid_request", `${field} must be an integer`);
+  }
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < min || value > max) {
+    throw new ApiError(400, "invalid_request", `${field} must be between ${min} and ${max}`);
+  }
+  return value;
+}
 
-  if (!Number.isFinite(limit) || limit < 1 || limit > maxLimit) {
-    throw new ApiError(400, "invalid_request", `limit must be between 1 and ${maxLimit}`);
-  }
-  if (!Number.isFinite(offset) || offset < 0 || offset > 1_000_000) {
-    throw new ApiError(400, "invalid_request", "offset must be between 0 and 1000000");
-  }
+export function getPagination(searchParams: URLSearchParams, defaultLimit = 50, maxLimit = 200) {
+  const limit = integerParam(searchParams.get("limit"), "limit", 1, maxLimit) ?? defaultLimit;
+  const offset = integerParam(searchParams.get("offset"), "offset", 0, 1_000_000) ?? 0;
   return { limit, offset };
 }

@@ -1,30 +1,53 @@
 import { NextResponse } from "next/server";
-import { serverConfig } from "@/lib/config";
 
 export const runtime = "nodejs";
 
-export async function GET() {
-  const configured = {
-    supabase: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
-    ai: Boolean(process.env.AI_API_KEY),
-    tigerGraph: Boolean(process.env.TIGERGRAPH_URL),
-    dodo: Boolean(process.env.DODO_PAYMENTS_API_KEY && process.env.DODO_PAYMENTS_WEBHOOK_KEY),
-  };
+const REQUIRED = [
+  "NEXT_PUBLIC_SUPABASE_URL",
+  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "PAIRING_CODE_SECRET",
+  "COMPANION_TOKEN_SECRET",
+] as const;
 
-  const appUrlConfigured = Boolean(process.env.APP_URL);
+const OPTIONAL = [
+  "APP_URL",
+  "AI_API_KEY",
+  "TIGERGRAPH_URL",
+  "DODO_PAYMENTS_API_KEY",
+  "DODO_PAYMENTS_WEBHOOK_KEY",
+  "DODO_PRODUCT_CREDITS",
+] as const;
+
+function present(name: string): boolean {
+  return Boolean(process.env[name] && process.env[name]!.trim().length > 0);
+}
+
+export async function GET() {
+  const missingRequired = REQUIRED.filter((name) => !present(name));
+  const missingOptional = OPTIONAL.filter((name) => !present(name));
 
   return NextResponse.json(
     {
       data: {
-        status: "ok",
+        status: missingRequired.length === 0 ? "ok" : "degraded",
         time: new Date().toISOString(),
-        services: configured,
-        warnings: appUrlConfigured ? [] : ["APP_URL is not set"],
+        services: {
+          supabase:
+            present("NEXT_PUBLIC_SUPABASE_URL") &&
+            present("NEXT_PUBLIC_SUPABASE_ANON_KEY") &&
+            present("SUPABASE_SERVICE_ROLE_KEY"),
+          companion: present("PAIRING_CODE_SECRET") && present("COMPANION_TOKEN_SECRET"),
+          ai: present("AI_API_KEY"),
+          tigerGraph: present("TIGERGRAPH_URL"),
+          dodo: present("DODO_PAYMENTS_API_KEY") && present("DODO_PAYMENTS_WEBHOOK_KEY"),
+        },
+        warnings: [
+          ...missingRequired.map((name) => `${name} is not set`),
+          ...missingOptional.map((name) => `${name} is not set (optional)`),
+        ],
       },
     },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
-
-// Referenced so a missing required secret fails clearly at runtime, not build.
-void serverConfig;

@@ -73,9 +73,11 @@ export async function POST(request: NextRequest, context: Context) {
       throw runError;
     }
 
+    let creditsCommitted = false;
     try {
       const result = await answerWithEvidence({ question: body.question, evidence });
       await commitCredits(reservationId);
+      creditsCommitted = true;
 
       const evidenceRefs = evidence
         .filter((item) => result.usedEvidenceIds.includes(item.id))
@@ -92,7 +94,9 @@ export async function POST(request: NextRequest, context: Context) {
         })
         .eq("id", runId);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error("[ai] failed to persist run metadata", updateError.code);
+      }
 
       return jsonOk({
         id: runId,
@@ -104,7 +108,9 @@ export async function POST(request: NextRequest, context: Context) {
         credits_charged: amount,
       });
     } catch (error) {
-      await releaseCredits(reservationId).catch(() => undefined);
+      if (!creditsCommitted) {
+        await releaseCredits(reservationId).catch(() => undefined);
+      }
       throw error;
     }
   });

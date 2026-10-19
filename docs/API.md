@@ -38,11 +38,25 @@ A different owner's resource is reported as `404`, not `403`.
 
 ### `GET /api/v1/health`
 
-No authentication. Reports which integrations are configured. Does not reveal
-secret values.
+No authentication. Reports which integrations are configured and lists missing
+environment variable names. It never reveals secret values. `status` is
+`degraded` when a required Supabase or companion secret is missing.
 
 ```json
-{ "data": { "status": "ok", "time": "...", "services": { "supabase": true, "ai": false, "tigerGraph": false, "dodo": false }, "warnings": [] } }
+{
+  "data": {
+    "status": "ok",
+    "time": "...",
+    "services": {
+      "supabase": true,
+      "companion": true,
+      "ai": false,
+      "tigerGraph": false,
+      "dodo": false
+    },
+    "warnings": ["AI_API_KEY is not set (optional)"]
+  }
+}
 ```
 
 ## Account and credits

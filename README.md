@@ -92,7 +92,7 @@ These commands pass locally:
 ```bash
 npm run typecheck          # server and tests
 npm run lint
-npm test                   # 25 tests: schemas, webhook signatures, normalizer, companion safety
+npm test                   # 31 tests: schemas, requests, webhook signatures, normalizer, companion safety
 npm run build              # Next.js production build
 npm run companion:typecheck
 npm run companion:build

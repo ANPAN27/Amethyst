@@ -242,9 +242,8 @@ export async function processDodoWebhook(input: {
       throw new PermanentWebhookError("Checkout user does not match webhook metadata");
     }
 
-    const product = getCreditProduct(checkout.product_id);
-    if (!product) {
-      throw new PermanentWebhookError("Purchased product is not configured for credits");
+    if (checkout.credits <= 0) {
+      throw new PermanentWebhookError("Checkout session has no credits");
     }
 
     const { error: paymentError } = await admin.from("payments").upsert(
@@ -254,7 +253,7 @@ export async function processDodoWebhook(input: {
         provider_payment_id: paymentId,
         checkout_session_id: checkout.id,
         product_id: checkout.product_id,
-        credits: product.credits,
+        credits: checkout.credits,
         amount: event.data.total_amount ?? event.data.amount ?? null,
         currency: event.data.currency ?? null,
         status: "succeeded",
@@ -270,7 +269,7 @@ export async function processDodoWebhook(input: {
 
     const grant = await grantCredits({
       userId: checkout.user_id,
-      amount: product.credits,
+      amount: checkout.credits,
       idempotencyKey: `dodo:payment:${paymentId}`,
       referenceType: "purchase",
       referenceId: paymentId,
