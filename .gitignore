@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+companion/node_modules/
+
+# builds
+.next/
+out/
+dist/
+companion/dist/
+coverage/
+*.tsbuildinfo
+
+# environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# logs and OS files
+*.log
+npm-debug.log*
+.DS_Store

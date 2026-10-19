@@ -1,0 +1,58 @@
+/*
+Amethyst TigerGraph schema.
+
+Install with an account that can create a graph, then create the query below.
+Vertex ids are project-scoped strings: "<project_uuid>:<entity_id>".
+Only relationships derived from a specific analysis job are stored here;
+Supabase remains the authoritative source for projects, jobs and findings.
+*/
+
+CREATE VERTEX AmethystEntity (
+  PRIMARY_ID id STRING,
+  entity_id STRING,
+  project_id STRING,
+  entity_type STRING,
+  label STRING,
+  properties STRING,
+  job_id STRING
+) WITH PRIMARY_ID_AS_ATTRIBUTE="true"
+
+CREATE UNDIRECTED EDGE AmethystRelation (
+  FROM AmethystEntity,
+  TO AmethystEntity,
+  project_id STRING,
+  relation STRING,
+  properties STRING,
+  job_id STRING
+)
+
+CREATE GRAPH Amethyst (*)
+
+/*
+Neighbors query. Returns one hop per depth level, bounded by the requested
+depth (1-3). The server never accepts a raw GSQL query from a client.
+*/
+
+CREATE QUERY amethyst_neighbors(STRING project_id, STRING entity_id, INT depth) FOR GRAPH Amethyst {
+  OrAccum @visited;
+  INT hops = 0;
+  Start = {AmethystEntity.*};
+
+  Seed = SELECT s FROM Start:s
+         WHERE s.project_id == project_id
+           AND s.entity_id == entity_id
+         ACCUM s.@visited += TRUE;
+
+  Frontier = Seed;
+
+  WHILE (Frontier.size() > 0 AND hops < depth) DO
+    hops = hops + 1;
+    Frontier = SELECT t FROM Frontier:s -(AmethystRelation:e)- AmethystEntity:t
+               WHERE t.project_id == project_id
+                 AND t.@visited == FALSE
+               ACCUM t.@visited += TRUE;
+    PRINT Frontier;
+  END;
+
+  PRINT Seed;
+}

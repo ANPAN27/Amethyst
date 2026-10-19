@@ -1,0 +1,43 @@
+{
+  "name": "amethyst",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Amethyst backend: evidence-grounded reverse-engineering workflows with REA, Supabase, TigerGraph, AI and Dodo Payments.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.19"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "companion:install": "npm --prefix companion install",
+    "companion:build": "npm --prefix companion run build",
+    "companion:typecheck": "npm --prefix companion run typecheck"
+  },
+  "dependencies": {
+    "@supabase/ssr": "0.12.7",
+    "@supabase/supabase-js": "2.118.0",
+    "dodopayments": "2.55.0",
+    "next": "15.5.28",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "server-only": "0.0.1",
+    "standardwebhooks": "1.1.1",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "3.3.1",
+    "@types/node": "22.18.6",
+    "@types/react": "19.1.13",
+    "@types/react-dom": "19.1.9",
+    "eslint": "9.39.5",
+    "eslint-config-next": "15.5.28",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5"
+  }
+}

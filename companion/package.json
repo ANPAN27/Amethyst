@@ -1,0 +1,23 @@
+{
+  "name": "amethyst-companion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local companion for Amethyst. Runs allowlisted REA workflows and submits evidence.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "amethyst-companion": "./dist/cli.js"
+  },
+  "engines": {
+    "node": ">=22.19"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/cli.js"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.6",
+    "typescript": "5.9.3"
+  }
+}
