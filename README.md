@@ -108,8 +108,12 @@ rolled-back transactions:
 - `finalize_job` set the job to `succeeded`/`100`, inserted one finding and one
   artifact, and stored the graph payload.
 
-RLS is enabled on all 18 public tables. Security advisors report only the four
-intentionally policy-less internal tables (privileges are revoked).
+RLS was exercised with the `authenticated` role and a simulated JWT: a user
+could see only their own project, target, job, and finding (one each), could not
+see another owner's rows, and could not insert into `projects` or `findings`
+(privilege denied). RLS is enabled on all 18 public tables. Security advisors
+report only the four intentionally policy-less internal tables (privileges are
+revoked).
 
 **Verified with real tool runs:** `rea-agents@6.7.0` was executed through the
 companion's `runRea` against a small local JavaScript sample (Node 22) and a
