@@ -50,9 +50,10 @@ Copy `.env.example` and fill in:
 | `COMPANION_TOKEN_SECRET` | yes | Different HMAC key |
 | `ARTIFACT_BUCKET` | no | Default `analysis-artifacts` |
 | `MAX_ARTIFACT_BYTES` | no | Default 25 MB; must not exceed the bucket cap |
-| `AI_API_KEY` | for AI | OpenAI-compatible provider key |
-| `AI_BASE_URL` | no | Default `https://api.openai.com/v1` |
-| `AI_MODEL` | no | Default `gpt-4.1-mini` |
+| `AI_PROVIDER` | no | `auto` (default), `openai`, or `gemini` |
+| `AI_API_KEY` | for AI | Provider API key; server-side only |
+| `AI_BASE_URL` | no | Default `https://api.openai.com/v1`. Native Gemini: `https://generativelanguage.googleapis.com/v1beta` |
+| `AI_MODEL` | for native Gemini | OpenAI-compatible default is `gpt-4.1-mini`. For native Gemini set a model id, or include it in a full `:generateContent` URL |
 | `AI_REQUEST_TIMEOUT_MS` | no | Default 60s |
 | `AI_MAX_EVIDENCE_CHARS` | no | Default 30,000 |
 | `CREDITS_AI_CHAT` | no | Default 1 |
@@ -110,10 +111,24 @@ not tested here.
 
 ## 5. AI provider
 
-The server calls `<AI_BASE_URL>/chat/completions` with a bearer key and expects
-an OpenAI-compatible response. It requests `response_format: json_object`.
-Validate that your provider supports it. If it does not, AI chat falls back to
-a clearly labeled partial answer, while codegen returns `503`.
+The server supports two API shapes and never mixes them:
+
+- **OpenAI-compatible:** calls `<AI_BASE_URL>/chat/completions` with a bearer key
+  and `response_format: { "type": "json_object" }`.
+- **Native Gemini:** calls
+  `<AI_BASE_URL>/models/<AI_MODEL>:generateContent` with `x-goog-api-key`,
+  `systemInstruction`, `contents`, and
+  `generationConfig.responseMimeType = "application/json"`.
+
+`AI_PROVIDER=auto` treats `generativelanguage.googleapis.com` as native Gemini,
+except for its `/openai` compatible path, and treats every other base URL as
+OpenAI-compatible. Set `AI_PROVIDER` explicitly to override detection. The
+server rejects a native `:generateContent` URL when the provider is OpenAI and
+rejects an `/openai` URL when the provider is Gemini.
+
+Validate that the selected model supports JSON mode. If the provider rejects the
+request, AI chat and codegen return `503`; a non-JSON chat response is returned
+only as a clearly labeled `partial` fallback with no citations.
 
 Only bounded findings are sent. No repository or binary contents are uploaded.
 

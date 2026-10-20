@@ -4,6 +4,13 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { serverConfig } from "@/lib/config";
 
+export function hasSupabaseConfig(): boolean {
+  return Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() &&
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim(),
+  );
+}
+
 /**
  * Cookie-bound Supabase client. Used only to verify a browser session; data
  * access still goes through RLS or the service-role client with explicit

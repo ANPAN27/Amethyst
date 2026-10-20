@@ -3,6 +3,14 @@ import "server-only";
 import { z } from "zod";
 import { serverConfig } from "@/lib/config";
 import { ApiError } from "@/lib/api/errors";
+import {
+  buildAiEndpoint,
+  buildGeminiRequestBody,
+  buildOpenAiRequestBody,
+  extractGeminiResult,
+  extractOpenAiResult,
+  type ChatMessage,
+} from "@/lib/services/ai-provider";
 
 export type EvidenceInput = {
   id: string;
@@ -86,27 +94,28 @@ type ModelResult = {
   outputTokens: number | null;
 };
 
-async function callModel(
-  messages: Array<{ role: "system" | "user"; content: string }>,
-  maxTokens: number,
-): Promise<ModelResult> {
-  const url = `${serverConfig.ai.baseUrl.replace(/\/+$/, "")}/chat/completions`;
+async function callModel(messages: ChatMessage[], maxTokens: number): Promise<ModelResult> {
+  const provider = serverConfig.ai.provider;
+  const model = serverConfig.ai.model;
+  const url = buildAiEndpoint({ provider, baseUrl: serverConfig.ai.baseUrl, model });
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  let body: Record<string, unknown>;
+
+  if (provider === "gemini") {
+    headers["x-goog-api-key"] = serverConfig.ai.apiKey;
+    body = buildGeminiRequestBody({ messages, maxTokens });
+  } else {
+    headers.Authorization = `Bearer ${serverConfig.ai.apiKey}`;
+    body = buildOpenAiRequestBody({ model, messages, maxTokens });
+  }
 
   let response: Response;
   try {
     response = await fetch(url, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${serverConfig.ai.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: serverConfig.ai.model,
-        messages,
-        temperature: 0.2,
-        max_tokens: maxTokens,
-        response_format: { type: "json_object" },
-      }),
+      headers,
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(serverConfig.ai.requestTimeoutMs),
     });
   } catch {
@@ -115,25 +124,47 @@ async function callModel(
 
   if (!response.ok) {
     throw new ApiError(503, "upstream_unavailable", "The AI provider rejected the request", {
+      provider,
       status: response.status,
     });
   }
 
-  const payload = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string | null } }>;
-    usage?: { prompt_tokens?: number; completion_tokens?: number };
-  };
+  let payload: unknown;
+  try {
+    payload = (await response.json()) as unknown;
+  } catch {
+    throw new ApiError(503, "upstream_unavailable", "The AI provider returned invalid JSON");
+  }
 
-  const content = payload.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new ApiError(503, "upstream_unavailable", "The AI provider returned an empty response");
+  const extracted =
+    provider === "gemini" ? extractGeminiResult(payload) : extractOpenAiResult(payload);
+
+  if (extracted.blockReason) {
+    throw new ApiError(503, "upstream_unavailable", "The AI provider blocked the response", {
+      provider,
+      reason: extracted.blockReason,
+    });
+  }
+
+  if (!extracted.text) {
+    throw new ApiError(503, "upstream_unavailable", "The AI provider returned an empty response", {
+      provider,
+    });
   }
 
   return {
-    rawText: content,
-    inputTokens: payload.usage?.prompt_tokens ?? null,
-    outputTokens: payload.usage?.completion_tokens ?? null,
+    rawText: extracted.text,
+    inputTokens: extracted.inputTokens,
+    outputTokens: extracted.outputTokens,
   };
+}
+
+function parseModelJson(rawText: string): unknown {
+  const trimmed = rawText.trim();
+  const unfenced = trimmed
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
+  return JSON.parse(unfenced);
 }
 
 function fallbackChat(rawText: string, hasEvidence: boolean) {
@@ -186,7 +217,7 @@ cited_evidence_ids (array of evidence ids), assumptions (array of strings).`,
 
   let parsed: z.infer<typeof chatResultSchema>;
   try {
-    parsed = chatResultSchema.parse(JSON.parse(result.rawText));
+    parsed = chatResultSchema.parse(parseModelJson(result.rawText));
   } catch {
     parsed = fallbackChat(result.rawText, input.evidence.length > 0);
   }
@@ -246,7 +277,7 @@ assumptions (array), limitations (array).`,
 
   let parsed: z.infer<typeof codegenResultSchema>;
   try {
-    parsed = codegenResultSchema.parse(JSON.parse(result.rawText));
+    parsed = codegenResultSchema.parse(parseModelJson(result.rawText));
   } catch {
     throw new ApiError(
       503,

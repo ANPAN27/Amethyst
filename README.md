@@ -7,13 +7,15 @@ a raw JSON artifact to this server. Supabase stores the authoritative data and
 enforces row-level security; TigerGraph is an optional derived graph index; AI
 answers cite stored findings only; Dodo Payments webhooks fund a credit ledger.
 
-This repository contains the server (Next.js App Router) and the companion CLI.
-It does **not** contain a browser UI beyond minimal status pages.
+This repository contains the server (Next.js App Router), an authenticated web
+dashboard, and the companion CLI. The dashboard manages projects, targets,
+companion pairing, jobs, findings, artifact downloads, and evidence-grounded AI
+chat/code generation. It calls the same versioned API that other clients use.
 
 ## Architecture
 
 ```
-Browser / API client
+Browser dashboard / API client
         |  Supabase access token (Authorization: Bearer)
         v
 Next.js route handlers  --->  Supabase Postgres + private Storage
@@ -21,7 +23,7 @@ Next.js route handlers  --->  Supabase Postgres + private Storage
         |                           |  service role, explicit ownership checks
         |                           |
         +--> TigerGraph (optional)  |
-        +--> OpenAI-compatible AI   |
+        +--> AI (OpenAI or Gemini)  |
         +--> Dodo Payments          |
 
 Local companion  --claim/progress/upload/result-->  Next.js
@@ -47,17 +49,23 @@ Local companion  --claim/progress/upload/result-->  Next.js
 - Node.js 22.19+ and npm 10+ (the SQLite workflow requires Node.js 24.15+ in
   the 24.x line or Node.js 26+; other workflows run on 22)
 - A Supabase project (Postgres 15+; this project was applied on Postgres 17)
-- Optional: TigerGraph, an OpenAI-compatible AI provider, Dodo Payments
+- Optional: TigerGraph, Gemini or an OpenAI-compatible AI provider, Dodo Payments
 - A local machine for the companion that can run `npx rea-agents@6.7.0`
 
 ## Quick start (server)
 
 ```bash
-npm install
+npm ci
 cp .env.example .env.local
 # fill in Supabase URL, anon key, service role key, and HMAC secrets
 npm run dev
+# open http://localhost:3000, create an account, and sign in
 ```
+
+The dashboard requires `NEXT_PUBLIC_SUPABASE_URL` and
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`. If either is missing, the app renders a setup
+page instead of crashing. Enable email/password auth in Supabase Auth if you
+want to use the built-in sign-up form.
 
 Apply migrations in order with the Supabase CLI:
 
@@ -92,7 +100,7 @@ These commands pass locally:
 ```bash
 npm run typecheck          # server and tests
 npm run lint
-npm test                   # 34 tests: schemas, requests, webhook signatures, normalizer, companion safety
+npm test                   # 58 tests: schemas, requests, webhook signatures, normalizer, AI providers, companion safety
 npm run build              # Next.js production build
 npm run companion:typecheck
 npm run companion:build

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { detectAiProvider } from "@/lib/services/ai-provider";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -77,11 +78,32 @@ export const serverConfig = {
     get apiKey() {
       return required("AI_API_KEY");
     },
+    get provider() {
+      const configured = optional("AI_PROVIDER")?.toLowerCase();
+      if (configured && !["auto", "openai", "gemini"].includes(configured)) {
+        throw new Error("AI_PROVIDER must be auto, openai, or gemini");
+      }
+      return detectAiProvider(
+        configured === "auto" ? undefined : configured,
+        this.baseUrl,
+      );
+    },
     get baseUrl() {
       return optional("AI_BASE_URL") ?? "https://api.openai.com/v1";
     },
     get model() {
-      return optional("AI_MODEL") ?? "gpt-4.1-mini";
+      const configured = optional("AI_MODEL");
+      if (configured) return configured;
+
+      if (this.provider === "gemini") {
+        const fromUrl = /\/models\/([^/:]+):generateContent/i.exec(this.baseUrl)?.[1];
+        if (fromUrl) return decodeURIComponent(fromUrl);
+        throw new Error(
+          "Missing required server configuration: AI_MODEL (set the Gemini model identifier)",
+        );
+      }
+
+      return "gpt-4.1-mini";
     },
     get requestTimeoutMs() {
       return intEnv("AI_REQUEST_TIMEOUT_MS", 60_000);
