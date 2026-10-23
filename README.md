@@ -80,18 +80,45 @@ production setup.
 
 ## Quick start (companion)
 
-```bash
-npm run companion:install
-npm run companion:build
+From the Amethyst repository root:
 
-# In the app: POST /api/v1/companions/pairing to get a one-time code.
-node companion/dist/cli.js pair --server https://your-amethyst.example --code XXXX-XXXX-XXXX
-node companion/dist/cli.js run
+```bash
+npm run companion:setup
 ```
 
-The first time a job targets a local path, the companion asks for approval on
-the terminal and remembers the real path. Use `--yes` only on a machine where
-you intend to auto-approve queued targets.
+That builds the CLI and links `amethyst-companion` into `~/.local/bin`, so the
+remaining commands work from any directory:
+
+```bash
+# Create a one-time pairing code in Settings, then:
+amethyst-companion pair --server https://your-amethyst.example --code XXXX-XXXX-XXXX
+
+# Create a project, then select a local target on the companion machine:
+amethyst-companion select --project <project-id> --kind javascript_application
+
+# If the target was registered from the web instead of `select`, approve it:
+amethyst-companion approve --path /absolute/path
+
+# Keep the worker running:
+amethyst-companion run
+```
+
+`select` opens a native folder/file picker (`zenity`, `kdialog`, or `yad`),
+validates the path locally, records explicit approval, and registers the target
+with the project. Install `zenity` on Ubuntu if no picker is available. For
+automation, `--path /absolute/path` skips the picker. The dashboard's Targets
+tab shows the command for the selected target kind and detects the new target
+automatically.
+
+For JavaScript applications, the companion analyzes a temporary source-only
+snapshot when the selected folder contains `node_modules`, `.next`, `.git`, or
+similar dependency/build directories. This keeps REA focused on application
+code and keeps the raw artifact below the server cap; the job summary records
+`analysis_scope` and the excluded directories.
+
+The companion never reads browser-selected files or executes arbitrary
+commands. Use `--yes` only on a dedicated machine where you intend to
+auto-approve queued target paths.
 
 ## Verification performed in this repository
 
@@ -100,7 +127,7 @@ These commands pass locally:
 ```bash
 npm run typecheck          # server and tests
 npm run lint
-npm test                   # 58 tests: schemas, requests, webhook signatures, normalizer, AI providers, companion safety
+npm test                   # 80 tests: schemas, requests, webhook signatures, normalizer, AI providers, UI helpers, companion safety, selection and staging
 npm run build              # Next.js production build
 npm run companion:typecheck
 npm run companion:build
@@ -123,17 +150,43 @@ see another owner's rows, and could not insert into `projects` or `findings`
 report only the four intentionally policy-less internal tables (privileges are
 revoked).
 
+**Verified with safe live test accounts:** the responsive dashboard was exercised
+at desktop and mobile widths through the production build. Supabase password
+login/logout, project creation through the UI, cross-owner authorization (404),
+target registration, companion pairing-code issuance, and signed-out redirects
+were all confirmed. Test accounts and all owned rows were removed afterward.
+
+**Verified with real Gemini calls:** live chat and code-generation requests were
+sent through the application's server routes against a confirmed test account.
+Chat returned `grounding=insufficient` with no evidence and charged 1 credit;
+codegen returned review-only TypeScript with `applied=false` and charged 5
+credits. Both `ai_runs` audit records and the resulting ledger balance were
+verified, then removed with the test account.
+
 **Verified with real tool runs:** `rea-agents@6.7.0` was executed through the
 companion's `runRea` against a small local JavaScript sample (Node 22) and a
 SQLite sample (Node 24.15). The JavaScript evidence envelope normalized to 8
 entities, 9 relationships, 2 source modules, and 1 package; the SQLite schema
-normalized to table entities and findings. A full paired companion-to-server
-job was not exercised.
+normalized to table entities and findings.
 
-**Not verified end-to-end:** a live TigerGraph upsert/query, a live AI
-completion, and a live Dodo checkout/webhook. Those require credentials and
-external accounts. See the "Unverified integrations" section in
-[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+**Verified with a full paired companion job:** a temporary account and project
+were paired to a companion, a harmless JavaScript project outside this
+repository was selected through the new companion path, and the queued
+`analyze_javascript_application` job ran through `rea-agents@6.7.0`. The job
+reached `succeeded`/`100` with 5 findings, 10 graph entities, 12 edges, and a
+140,503-byte artifact whose signed download parsed successfully. The AI evidence
+gate rejected an unapproved chat request with
+`400 evidence_consent_required` before any provider call or credit charge. The
+companion was revoked and all test rows were removed.
+
+**Not verified end-to-end:** a live TigerGraph upsert/query and a live Dodo
+checkout/webhook. Those require external services. Managed-artifact, Go, and
+Rust workflows also remain unverified without sample artifacts. See the
+"Unverified integrations" section in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+Supabase's sign-up email endpoint returned `429 over_email_send_rate_limit`
+during verification. The signup form and expected confirmation states were
+checked, but a new confirmation email could not be delivered in this session.
 
 ## Documentation
 

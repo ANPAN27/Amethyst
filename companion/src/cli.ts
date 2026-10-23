@@ -7,9 +7,17 @@ import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { ApiClient, CompanionApiError, normalizeServerUrl } from "./api.js";
 import { configPath, loadConfig, saveConfig, type CompanionConfig } from "./config.js";
-import { approveTarget } from "./approval.js";
+import { approveTarget, validateTargetPath } from "./approval.js";
 import { WORKFLOWS, runRea, type JobParams, type WorkflowName } from "./process.js";
 import { normalizeReaOutput } from "./normalize.js";
+import { stageJavaScriptTarget } from "./staging.js";
+import {
+  TARGET_KINDS,
+  normalizeTargetKind,
+  pickLocalPath,
+  targetKindLabel,
+  validateSelectedTarget,
+} from "./selection.js";
 
 const VERSION = "0.1.0";
 const DEFAULT_TIMEOUT_MS = 15 * 60_000;
@@ -29,9 +37,16 @@ function usage(): void {
 
 Usage:
   amethyst-companion pair --server URL [--code CODE] [--name NAME]
+  amethyst-companion select --project PROJECT_ID [--kind KIND] [--path PATH] [--label LABEL]
+  amethyst-companion approve --path PATH
   amethyst-companion run [--once] [--interval SECONDS] [--yes]
   amethyst-companion status
   amethyst-companion revoke
+
+select opens a native folder/file picker on this machine, validates the chosen
+path, remembers local approval, and registers the target with the server.
+Kinds: javascript_application, managed_artifact, sqlite_database, go_binary,
+rust_binary. If --kind is omitted on a folder, JavaScript application is used.
 
 Environment:
   REA_BIN                 Existing REA executable (default: npx -y rea-agents@6.7.0)
@@ -66,7 +81,12 @@ function sleep(ms: number): Promise<void> {
 }
 
 function safeMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : "Unknown error";
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "Unknown error";
   return message.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").slice(0, 800);
 }
 
@@ -134,6 +154,20 @@ function supportsSqliteWorkflow(): boolean {
 }
 
 async function processJob(client: ApiClient, config: CompanionConfig, job: Job, autoApprove: boolean): Promise<void> {
+  // `select` and `approve` may be run while the worker is already running.
+  // Reload approvals so a newly approved path does not require a restart.
+  const latestConfig = await loadConfig();
+  if (latestConfig.companion_id !== config.companion_id) {
+    await submitFailure(
+      client,
+      job,
+      "LOCAL_CONFIG_CHANGED",
+      "The local companion configuration changed while this job was queued",
+    );
+    return;
+  }
+  config = latestConfig;
+
   const workflow = job.workflow as WorkflowName;
   if (!WORKFLOWS.includes(workflow)) {
     await submitFailure(client, job, "UNSUPPORTED_WORKFLOW", `Unsupported workflow: ${job.workflow}`);
@@ -181,11 +215,18 @@ async function processJob(client: ApiClient, config: CompanionConfig, job: Job, 
   const outputPath = join(tempDir, "evidence.json");
 
   try {
-    await client.progress(job.id, 5, "Starting REA");
+    await client.progress(job.id, 5, "Preparing analysis scope");
+
+    const scope = await stageJavaScriptTarget(workflow, approval.realPath, tempDir);
+    if (scope.staged) {
+      console.log(`Excluded from analysis: ${scope.excluded.join(", ")}`);
+    }
+
+    await client.progress(job.id, 10, "Starting REA");
 
     const run = await runRea({
       workflow,
-      targetPath: approval.realPath,
+      targetPath: scope.path,
       params: job.params ?? {},
       outputPath,
       timeoutMs,
@@ -228,6 +269,8 @@ async function processJob(client: ApiClient, config: CompanionConfig, job: Job, 
       status: "succeeded",
       summary: {
         ...normalized.summary,
+        analysis_scope: scope.staged ? "source_only_staged" : "target",
+        ...(scope.staged ? { excluded_directories: scope.excluded } : {}),
         duration_ms: run.durationMs,
         rea_version: process.env.REA_VERSION ?? null,
         artifact_bytes: content.byteLength,
@@ -305,6 +348,81 @@ async function commandRun(args: string[]): Promise<void> {
   }
 }
 
+async function commandSelect(args: string[]): Promise<void> {
+  const projectId = getFlag(args, "--project");
+  if (!projectId) {
+    throw new Error("--project PROJECT_ID is required");
+  }
+
+  const requestedKind = normalizeTargetKind(getFlag(args, "--kind"));
+  if (getFlag(args, "--kind") && !requestedKind) {
+    throw new Error(`Unsupported target kind. Use one of: ${TARGET_KINDS.join(", ")}`);
+  }
+  const pickerKind = requestedKind ?? "javascript_application";
+
+  const pathFlag = getFlag(args, "--path");
+  const selectedPath = pathFlag ?? (await pickLocalPath(pickerKind));
+  if (!selectedPath) {
+    console.log("Selection cancelled.");
+    return;
+  }
+
+  let selected: Awaited<ReturnType<typeof validateSelectedTarget>>;
+  try {
+    selected = await validateSelectedTarget({
+      path: selectedPath,
+      kind: requestedKind ?? undefined,
+    });
+  } catch (error) {
+    throw new Error(
+      error instanceof Error ? `${error.message}. Nothing was registered.` : "Invalid selection",
+    );
+  }
+
+  const config = await loadConfig();
+  const client = new ApiClient(config.server_url, config.token);
+  const label = (getFlag(args, "--label") ?? selected.label).trim().slice(0, 200);
+  if (!label) throw new Error("Target label cannot be empty");
+
+  if (!config.approved_paths.includes(selected.realPath)) {
+    config.approved_paths.push(selected.realPath);
+    await saveConfig(config);
+  }
+
+  const response = await client.registerTarget({
+    project_id: projectId,
+    kind: selected.kind,
+    label,
+    target_path: selected.realPath,
+    metadata: {
+      selection: pathFlag ? "path_flag" : "native_picker",
+      platform: `${platform()}-${process.arch}`,
+      symlink_resolved: selected.isSymlink,
+      size_bytes: selected.sizeBytes,
+    },
+  });
+
+  console.log(`Selected ${targetKindLabel(selected.kind)}:`);
+  console.log(`  ${selected.realPath}`);
+  if (selected.isSymlink) console.log("  (symlink resolved before registration)");
+  console.log(`Registered target ${response.data.target.id} as "${response.data.target.label}".`);
+  console.log("Local approval is saved for this path.");
+  console.log("Start the worker with: amethyst-companion run");
+}
+
+async function commandApprove(args: string[]): Promise<void> {
+  const path = getFlag(args, "--path");
+  if (!path) throw new Error("--path is required");
+
+  const config = await loadConfig();
+  const realPath = await validateTargetPath(path);
+  if (!config.approved_paths.includes(realPath)) {
+    config.approved_paths.push(realPath);
+    await saveConfig(config);
+  }
+  console.log(`Approved local analysis of ${realPath}.`);
+}
+
 async function commandStatus(): Promise<void> {
   const config = await loadConfig();
   const client = new ApiClient(config.server_url, config.token);
@@ -331,6 +449,12 @@ async function main(): Promise<void> {
   switch (command) {
     case "pair":
       await commandPair(args);
+      return;
+    case "select":
+      await commandSelect(args);
+      return;
+    case "approve":
+      await commandApprove(args);
       return;
     case "run":
       await commandRun(args);

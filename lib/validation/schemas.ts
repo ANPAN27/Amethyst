@@ -10,6 +10,16 @@ export const WORKFLOWS = [
 
 export const workflowSchema = z.enum(WORKFLOWS);
 
+export const TARGET_KINDS = [
+  "javascript_application",
+  "managed_artifact",
+  "sqlite_database",
+  "go_binary",
+  "rust_binary",
+] as const;
+
+export const targetKindSchema = z.enum(TARGET_KINDS);
+
 export const findingClassSchema = z.enum([
   "observed",
   "verified_relationship",
@@ -36,7 +46,7 @@ export const updateProjectSchema = z
   });
 
 export const createTargetSchema = z.object({
-  kind: trimmed(60),
+  kind: targetKindSchema,
   label: trimmed(200),
   target_path: z
     .string()
@@ -157,12 +167,28 @@ export const exchangePairingCodeSchema = z.object({
 export const aiChatSchema = z.object({
   question: trimmed(8000),
   finding_ids: z.array(uuid).max(20).optional(),
+  consent_to_send_evidence: z.boolean().optional(),
 });
 
 export const aiCodegenSchema = z.object({
   instructions: trimmed(8000),
   finding_ids: z.array(uuid).max(20).optional(),
   language: z.string().trim().max(60).optional(),
+  consent_to_send_evidence: z.boolean().optional(),
+});
+
+export const companionTargetSchema = z.object({
+  project_id: uuid,
+  kind: targetKindSchema,
+  label: trimmed(200),
+  target_path: z
+    .string()
+    .min(1)
+    .max(4096)
+    .refine((value) => value.startsWith("/") || /^[A-Za-z]:\\/.test(value), {
+      message: "target_path must be an absolute local path",
+    }),
+  metadata: z.record(z.unknown()).optional(),
 });
 
 export const graphQuerySchema = z.object({

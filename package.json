@@ -17,6 +17,7 @@
     "test:watch": "vitest",
     "companion:install": "npm --prefix companion install",
     "companion:build": "npm --prefix companion run build",
+    "companion:setup": "node scripts/setup-companion.mjs",
     "companion:typecheck": "npm --prefix companion run typecheck"
   },
   "dependencies": {

@@ -145,12 +145,26 @@ were not executed against a live instance.
 
 ## 7. Companion rollout
 
+From the Amethyst repository root:
+
 ```bash
-npm run companion:install
-npm run companion:build
-node companion/dist/cli.js pair --server https://<your-origin> --code <code>
-AMETHYST_AUTO_APPROVE=0 node companion/dist/cli.js run
+npm run companion:setup
 ```
+
+This links `amethyst-companion` into `~/.local/bin`. Then, from any directory:
+
+```bash
+amethyst-companion pair --server https://<your-origin> --code <code>
+amethyst-companion select --project <project-id> --kind javascript_application
+# Only for a target registered from the web:
+amethyst-companion approve --path /absolute/path
+AMETHYST_AUTO_APPROVE=0 amethyst-companion run
+```
+
+`select` opens a native picker (`zenity`, `kdialog`, or `yad`), validates the
+chosen path on the companion machine, records local approval, and registers the
+target. Install `zenity` on Ubuntu if no picker is installed. Use
+`--path /absolute/path` only for non-interactive runs.
 
 Recommended:
 
@@ -159,9 +173,16 @@ Recommended:
   understand that queued paths will be approved automatically.
 - Pin `REA_PACKAGE` and set `REA_VERSION` in the environment for auditability.
 - Use Node.js 24.15+ in the 24.x line or 26+ if you need the SQLite workflow.
-  Other workflows run on the server's Node 22 baseline.
+  Other workflows need Node.js 22.19+. A systemd unit must put that runtime
+  first on `PATH` (or invoke its `node` explicitly); distro Node 18 fails inside
+  REA with `ERR_IMPORT_ASSERTION_TYPE_MISSING`.
 - Install a process supervisor (systemd, launchd, etc.) for long-running use.
-- Revoke the companion with `node companion/dist/cli.js revoke` if the machine
+  A supervisord worker has no TTY, so approve every target first with
+  `amethyst-companion approve` (or `select`) rather than relying on a prompt.
+- JavaScript folders containing `node_modules`, `.next`, `.git`, or similar
+  dependency/build directories are analyzed from a temporary source-only
+  snapshot. The job summary records `analysis_scope` and excluded directories.
+- Revoke the companion with `amethyst-companion revoke` if the machine
   is retired.
 
 Companion environment variables:
@@ -176,13 +197,14 @@ Companion environment variables:
 | `AMETHYST_MAX_ARTIFACT_BYTES` | `26214400` | Local artifact cap |
 | `AMETHYST_AUTO_APPROVE` | unset | `1` auto-approves targets |
 | `AMETHYST_ALLOW_INSECURE_HTTP` | unset | `1` allows non-local HTTP |
+| `AMETHYST_APP_DIR` | auto-detected | Repository path refused as an analysis target |
 
 ## 8. End-to-end smoke test
 
 1. Sign in through Supabase and obtain an access token.
 2. `GET /api/v1/health` and confirm Supabase is `true`.
-3. `POST /api/v1/projects`, then create a target with an absolute path on the
-   companion machine.
+3. `POST /api/v1/projects`, then run `companion select --project <id>` on the
+   target machine and confirm the selected target appears in the project.
 4. Pair a companion and start `run`.
 5. Create a job for that target and companion.
 6. Confirm the job moves `queued → claimed → running → succeeded`.
@@ -199,13 +221,19 @@ These were implemented but could not be exercised with real credentials or
 samples in this environment:
 
 - Live TigerGraph schema install, upsert, and neighbor query.
-- Live AI completion and provider-specific JSON mode behavior.
 - Live Dodo checkout creation and a real signed webhook.
 - Managed-artifact, Go, and Rust workflows (no sample artifacts available).
 
+Live AI chat and code generation were exercised through the configured Gemini
+provider with a temporary account. The OpenAI-compatible provider path remains
+unverified against a live endpoint.
+
 The JavaScript and SQLite workflows were exercised successfully with
 `rea-agents@6.7.0` through the companion's `runRea` on local samples (JavaScript
-on Node 22, SQLite on Node 24.15).
+on Node 22, SQLite on Node 24.15). A full paired companion-to-server JavaScript
+job also succeeded: target selection, real REA execution, result upload,
+findings, graph counts, and artifact download were verified, and the temporary
+account rows were removed.
 
 Do not treat this repository as production-verified for those paths until the
 smoke test above passes in staging.

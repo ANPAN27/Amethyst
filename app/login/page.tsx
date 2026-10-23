@@ -1,36 +1,45 @@
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 import { AuthForm } from "@/components/auth-form";
+import { AuthShell } from "@/components/auth/auth-shell";
 import { ConfigNotice } from "@/components/config-notice";
-import { createSupabaseServerClient, hasSupabaseConfig } from "@/lib/supabase/server";
+import { Notice } from "@/components/ui/primitives";
+import { getSessionUser } from "@/lib/server-data";
+import { hasSupabaseConfig } from "@/lib/supabase/server";
+import { safeNextPath } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
 
-export default async function LoginPage() {
+export const metadata: Metadata = { title: "Sign in" };
+
+type PageProps = {
+  searchParams: Promise<{ next?: string; error?: string }>;
+};
+
+export default async function LoginPage({ searchParams }: PageProps) {
   if (!hasSupabaseConfig()) return <ConfigNotice />;
 
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (user) redirect("/projects");
+  const params = await searchParams;
+  const nextPath = safeNextPath(params.next, "/overview");
+  const user = await getSessionUser();
+  if (user) redirect(nextPath);
 
   return (
-    <main className="container narrow">
-      <div className="header">
-        <div className="brand">
-          Amethyst<span>.</span>
-        </div>
-      </div>
-      <h1>Sign in</h1>
-      <p className="muted">
-        Amethyst analyzes applications through a paired local companion. Start by signing in to
-        create a project.
-      </p>
+    <AuthShell
+      title="Sign in to Amethyst"
+      description="Access owner-scoped projects, local analysis jobs, evidence, and AI workspaces."
+    >
+      {params.error ? (
+        <Notice tone="danger" title="Authentication could not be completed">
+          The link may be expired or already used. Sign in, or request a new recovery email.
+        </Notice>
+      ) : null}
       <AuthForm
+        mode="signin"
+        nextPath={nextPath}
         supabaseAnonKey={process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""}
         supabaseUrl={process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}
       />
-    </main>
+    </AuthShell>
   );
 }

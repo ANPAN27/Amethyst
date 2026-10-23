@@ -121,6 +121,13 @@ claims the job.
 `kind` must match the workflow used later. See `TARGET_KINDS` in
 `lib/services/jobs.ts`.
 
+The dashboard normally registers targets through the paired companion, which
+validates the path on that machine before calling
+`POST /api/v1/companion/targets` with `{ project_id, kind, label, target_path,
+metadata? }`. The companion exposes this as
+`amethyst-companion select --project <id> --path <absolute-path>` or a
+native folder picker when `--path` is omitted.
+
 ## Jobs
 
 ### `POST /api/v1/projects/:id/jobs`
@@ -163,18 +170,32 @@ successful response. Provider failures release the reservation.
 ### `POST /api/v1/projects/:id/ai/chat`
 
 ```json
-{ "question": "What calls parseConfig?", "finding_ids": ["uuid"] }
+{
+  "question": "What calls parseConfig?",
+  "finding_ids": ["uuid"],
+  "consent_to_send_evidence": true
+}
 ```
 
 Returns an answer, `grounding` (`evidence`, `partial`, `insufficient`), cited
 evidence ids, assumptions, and the evidence records that were supplied.
 `finding_ids` is optional and capped at 20; when omitted the 30 most recent
 project findings are used. Only these bounded findings are sent to the model.
+When any finding evidence exists, `consent_to_send_evidence` must be `true`;
+otherwise the route returns `400 invalid_request` with
+`details.reason = "evidence_consent_required"` before reserving credits or
+calling the provider. Raw source files, target paths, and artifacts are never
+sent.
 
 ### `POST /api/v1/projects/:id/ai/codegen`
 
 ```json
-{ "instructions": "Add a null check", "language": "typescript", "finding_ids": [] }
+{
+  "instructions": "Add a null check",
+  "language": "typescript",
+  "finding_ids": [],
+  "consent_to_send_evidence": true
+}
 ```
 
 Returns reviewable code plus `applied: false`. Generated code is never applied
@@ -210,12 +231,18 @@ reused.
 
 ### Companion job routes
 
+- `POST /api/v1/companion/targets` — registers a locally validated target for
+  a project owned by the companion's owner
 - `POST /api/v1/companion/jobs/next` — atomically claims the oldest queued job
   for this companion (`FOR UPDATE SKIP LOCKED`), or `{ job: null }`
 - `POST /api/v1/companion/jobs/:id/progress` — `{ progress: 0..99, message? }`
 - `POST /api/v1/companion/jobs/:id/artifact` — returns a signed upload URL for
   a private JSON artifact (25 MB default); rejects if one already exists
 - `POST /api/v1/companion/jobs/:id/result` — finalizes the job
+
+JavaScript results may include `summary.analysis_scope`:
+`"target"` for in-place analysis or `"source_only_staged"` when dependency
+and build directories were excluded into a temporary source-only snapshot.
 
 Result payload:
 
@@ -287,6 +314,7 @@ Durable Postgres buckets, keyed by user (or IP for unauthenticated pairing):
 | `graph:query` | 60 / min |
 | `graph:sync` | 10 / min |
 | `credits:checkout` | 10 / hour |
+| `companion:targets` | 30 / hour |
 | `companion:claim` | 240 / hour |
 | `companion:progress` | 600 / hour |
 | `companion:artifact` | 120 / hour |

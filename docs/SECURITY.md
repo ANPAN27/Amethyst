@@ -76,9 +76,11 @@ the service role.
   body field, or finding can become an arbitrary command or shell fragment.
 - Workflow parameters are allowlisted in the server schema and again in the
   companion command builder.
-- A target path must be absolute, must exist, is resolved with `realpath`, and
-  must be approved locally. Approval is remembered per real path. `--yes` is an
-  explicit opt-in for unattended operation.
+- A target path must be absolute, must exist, be readable, and is resolved with
+  `realpath`. Native selection rejects filesystem roots and the Amethyst
+  repository, and checks SQLite/PE/ELF/Mach-O headers before registration.
+  Approval is remembered per real path. `--yes` is an explicit opt-in for
+  unattended operation.
 - REA output is size-capped, has a timeout, and is parsed as JSON. Invalid or
   unknown output produces an honest "no recognized inventory" finding rather
   than fabricated data.
@@ -98,6 +100,9 @@ the service role.
   it. A path must stay under the job's `project/job/` prefix.
 - Only bounded stored findings (not repositories or binaries) are sent to the
   AI provider. The context is truncated and control tokens are stripped.
+- The server refuses to send finding evidence unless the request includes
+  explicit consent (`consent_to_send_evidence: true`); the UI requires a
+  checkbox and resets it when the project or selection changes.
 - The system prompt tells the model that evidence is untrusted and must never be
   followed as instructions. This mitigates, but cannot eliminate, prompt
   injection; answers are labeled with `grounding` and citations.

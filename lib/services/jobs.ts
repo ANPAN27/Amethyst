@@ -16,6 +16,13 @@ export function targetKindForWorkflow(workflow: Workflow): string {
   return TARGET_KIND_BY_WORKFLOW[workflow];
 }
 
+export function workflowForTargetKind(targetKind: string): Workflow | null {
+  const entry = (Object.entries(TARGET_KIND_BY_WORKFLOW) as [Workflow, string][]).find(
+    ([, kind]) => kind === targetKind,
+  );
+  return entry?.[0] ?? null;
+}
+
 export function workflowMatchesTargetKind(workflow: Workflow, targetKind: string): boolean {
   return TARGET_KIND_BY_WORKFLOW[workflow] === targetKind;
 }

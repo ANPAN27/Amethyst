@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  aiChatSchema,
+  companionTargetSchema,
   createJobSchema,
   createTargetSchema,
   exchangePairingCodeSchema,
@@ -64,16 +66,55 @@ describe("workflow validation", () => {
 describe("target validation", () => {
   it("requires a local absolute path", () => {
     expect(
-      createTargetSchema.safeParse({ kind: "javascript_app", label: "app", target_path: "relative" })
+      createTargetSchema.safeParse({
+        kind: "javascript_application",
+        label: "app",
+        target_path: "relative",
+      })
         .success,
     ).toBe(false);
     expect(
       createTargetSchema.safeParse({
-        kind: "javascript_app",
+        kind: "javascript_application",
         label: "app",
         target_path: "/tmp/app",
       }).success,
     ).toBe(true);
+    expect(
+      createTargetSchema.safeParse({
+        kind: "run_arbitrary_command",
+        label: "app",
+        target_path: "/tmp/app",
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("companion target registration validation", () => {
+  it("requires an allowlisted kind and an absolute path", () => {
+    const base = {
+      project_id: uuid,
+      kind: "javascript_application",
+      label: "Desktop app",
+      target_path: "/home/user/app",
+    };
+
+    expect(companionTargetSchema.safeParse(base).success).toBe(true);
+    expect(
+      companionTargetSchema.safeParse({ ...base, kind: "javascript_app" }).success,
+    ).toBe(false);
+    expect(
+      companionTargetSchema.safeParse({ ...base, target_path: "relative/app" }).success,
+    ).toBe(false);
+  });
+
+  it("accepts explicit AI evidence consent", () => {
+    expect(aiChatSchema.safeParse({ question: "Explain", consent_to_send_evidence: true }).success).toBe(
+      true,
+    );
+    expect(aiChatSchema.safeParse({ question: "Explain" }).data?.consent_to_send_evidence).toBe(
+      undefined,
+    );
   });
 });
 

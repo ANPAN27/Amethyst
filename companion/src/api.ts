@@ -104,6 +104,31 @@ export class ApiClient {
     );
   }
 
+  async registerTarget(input: {
+    project_id: string;
+    kind: string;
+    label: string;
+    target_path: string;
+    metadata: Record<string, unknown>;
+  }): Promise<{
+    data: {
+      target: {
+        id: string;
+        kind: string;
+        label: string;
+        target_path: string;
+        metadata: Record<string, unknown>;
+        created_at: string;
+      };
+    };
+  }> {
+    return this.request(
+      "/api/v1/companion/targets",
+      { method: "POST", body: JSON.stringify(input) },
+      20_000,
+    );
+  }
+
   async claimJob<T>(): Promise<T> {
     return this.request("/api/v1/companion/jobs/next", { method: "POST", body: "{}" }, 35_000);
   }

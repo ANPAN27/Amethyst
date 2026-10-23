@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { requireProject, requireUser } from "@/lib/api/auth";
-import { jsonOk, withRouteHandler } from "@/lib/api/errors";
+import { ApiError, jsonOk, withRouteHandler } from "@/lib/api/errors";
 import { parseJson, parseUuid } from "@/lib/api/request";
 import { aiCodegenSchema } from "@/lib/validation/schemas";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -46,6 +46,15 @@ export async function POST(request: NextRequest, context: Context) {
       detail: row.detail,
       evidence: row.evidence,
     }));
+
+    if (evidence.length > 0 && body.consent_to_send_evidence !== true) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        "Explicit approval is required before sending finding evidence to the AI provider",
+        { reason: "evidence_consent_required" },
+      );
+    }
 
     const runId = crypto.randomUUID();
     const amount = serverConfig.credits.codegen;
