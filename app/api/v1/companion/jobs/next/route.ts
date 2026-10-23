@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export async function POST(request: NextRequest) {
   return withRouteHandler(async () => {
     const companion = await authenticateCompanion(request);
-    await enforceRateLimit(companion.id, "companion:claim", 240, 3600);
+    await enforceRateLimit(companion.id, "companion:claim", 3600, 3600);
 
     const admin = getSupabaseAdmin();
     const { data, error } = await admin.rpc("claim_next_job", {

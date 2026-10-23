@@ -1,5 +1,5 @@
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -64,6 +64,12 @@ describe("companion local target selection", () => {
     await expect(
       validateSelectedTarget({ path: process.cwd() }),
     ).rejects.toThrow(/Amethyst application directory/);
+  });
+
+  it("rejects the home directory as a JavaScript target", async () => {
+    await expect(
+      validateSelectedTarget({ path: homedir(), appDir: null }),
+    ).rejects.toThrow(/home directory/);
   });
 
   it("rejects empty folders and missing paths", async () => {

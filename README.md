@@ -114,7 +114,9 @@ For JavaScript applications, the companion analyzes a temporary source-only
 snapshot when the selected folder contains `node_modules`, `.next`, `.git`, or
 similar dependency/build directories. This keeps REA focused on application
 code and keeps the raw artifact below the server cap; the job summary records
-`analysis_scope` and the excluded directories.
+`analysis_scope` and the excluded directories. The home directory is refused,
+and a bounded pre-copy inventory rejects targets above 25,000 retained files or
+2 GiB so a parent-folder selection cannot copy an entire home directory.
 
 The companion never reads browser-selected files or executes arbitrary
 commands. Use `--yes` only on a dedicated machine where you intend to
@@ -127,7 +129,7 @@ These commands pass locally:
 ```bash
 npm run typecheck          # server and tests
 npm run lint
-npm test                   # 80 tests: schemas, requests, webhook signatures, normalizer, AI providers, UI helpers, companion safety, selection and staging
+npm test                   # 85 tests: schemas, requests, webhook signatures, normalizer, AI providers, UI helpers, companion safety, selection and staging
 npm run build              # Next.js production build
 npm run companion:typecheck
 npm run companion:build

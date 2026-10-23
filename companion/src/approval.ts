@@ -3,11 +3,13 @@ import { isAbsolute } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import type { CompanionConfig } from "./config.js";
+import { assertNotHomeDirectory, TargetScopeError } from "./target-scope.js";
 
 export type ApprovalResult = {
   approved: boolean;
   realPath: string | null;
   reason?: string;
+  errorCode?: string;
 };
 
 type ApprovalConfig = Pick<CompanionConfig, "approved_paths">;
@@ -24,6 +26,7 @@ export async function validateTargetPath(path: string): Promise<string> {
   if (!info.isFile() && !info.isDirectory()) {
     throw new Error("Target must be a regular file or directory");
   }
+  assertNotHomeDirectory(resolved);
   return resolved;
 }
 
@@ -44,6 +47,7 @@ export async function approveTarget(input: {
       approved: false,
       realPath: null,
       reason: error instanceof Error ? error.message : "Invalid target path",
+      ...(error instanceof TargetScopeError ? { errorCode: error.code } : {}),
     };
   }
 

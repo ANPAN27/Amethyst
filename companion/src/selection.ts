@@ -4,6 +4,7 @@ import { constants } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertNotHomeDirectory } from "./target-scope.js";
 
 export const TARGET_KINDS = [
   "javascript_application",
@@ -180,6 +181,7 @@ export async function validateSelectedTarget(input: {
   if (realPath === dirname(realPath)) {
     throw new Error("Refusing to use a filesystem root as an analysis target");
   }
+  assertNotHomeDirectory(realPath);
 
   try {
     await access(realPath, constants.R_OK);

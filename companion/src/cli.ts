@@ -11,6 +11,7 @@ import { approveTarget, validateTargetPath } from "./approval.js";
 import { WORKFLOWS, runRea, type JobParams, type WorkflowName } from "./process.js";
 import { normalizeReaOutput } from "./normalize.js";
 import { stageJavaScriptTarget } from "./staging.js";
+import { TargetScopeError } from "./target-scope.js";
 import {
   TARGET_KINDS,
   normalizeTargetKind,
@@ -196,7 +197,7 @@ async function processJob(client: ApiClient, config: CompanionConfig, job: Job, 
     await submitFailure(
       client,
       job,
-      "TARGET_NOT_APPROVED",
+      approval.errorCode ?? "TARGET_NOT_APPROVED",
       approval.reason ?? "Target access was not approved",
     );
     return;
@@ -298,7 +299,12 @@ async function processJob(client: ApiClient, config: CompanionConfig, job: Job, 
       console.log(`Job ${job.id} is no longer open.`);
       return;
     }
-    const code = error instanceof Error && /timed out/i.test(error.message) ? "REA_TIMEOUT" : "ANALYSIS_FAILED";
+    const code =
+      error instanceof TargetScopeError
+        ? error.code
+        : error instanceof Error && /timed out/i.test(error.message)
+          ? "REA_TIMEOUT"
+          : "ANALYSIS_FAILED";
     await submitFailure(client, job, code, safeMessage(error));
     console.error(`Job ${job.id} failed: ${safeMessage(error)}`);
   } finally {

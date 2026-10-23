@@ -92,6 +92,12 @@ summary records `analysis_scope: "source_only_staged"` and the excluded
 directories. ASAR files and directories without those folders are analyzed in
 place.
 
+The home directory is refused as a target. Before staging, the companion
+inventories the retained source tree and rejects a job that exceeds 25,000
+files or 2 GiB; this prevents an accidental parent/home selection from copying
+the whole filesystem and sitting at 5% progress. Both limits can be raised for
+an intentionally large application.
+
 Options:
 
 ```
@@ -122,6 +128,8 @@ amethyst-companion revoke      # revoke server credentials and delete local conf
 | `AMETHYST_CONFIG` | `~/.amethyst/companion.json` | Config path |
 | `AMETHYST_JOB_TIMEOUT_MS` | `900000` | Per-job timeout |
 | `AMETHYST_MAX_ARTIFACT_BYTES` | `26214400` | Local output cap |
+| `AMETHYST_MAX_STAGE_FILES` | `25000` | Maximum retained files before staging |
+| `AMETHYST_MAX_STAGE_BYTES` | `2147483648` | Maximum retained bytes before staging |
 | `AMETHYST_AUTO_APPROVE` | unset | `1` auto-approves targets |
 | `AMETHYST_ALLOW_INSECURE_HTTP` | unset | `1` allows non-local HTTP |
 | `AMETHYST_APP_DIR` | auto-detected | Repository path refused as a local target |
@@ -136,8 +144,10 @@ explicitly set.
 - Workflow parameters are allowlisted and passed as separate arguments.
 - Output size cap, process timeout, and JSON parsing.
 - Targets must be absolute, exist, be readable, and be approved locally.
-- Native selection resolves symlinks and rejects filesystem roots and the
-  Amethyst repository.
+- Native selection resolves symlinks and rejects filesystem roots, the home
+  directory, and the Amethyst repository.
+- Staging inventories the retained source tree first and fails broad targets
+  before copying any files.
 - Unknown REA output shapes produce an honest "not recognized" finding instead
   of fabricated results.
 - Temporary output files live in an OS temp directory and are removed after the

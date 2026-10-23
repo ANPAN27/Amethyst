@@ -1,5 +1,5 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { approveTarget, validateTargetPath } from "../companion/src/approval";
@@ -16,6 +16,17 @@ describe("companion target approval", () => {
   it("rejects relative and missing paths", async () => {
     await expect(validateTargetPath("relative/path")).rejects.toThrow(/absolute/);
     await expect(validateTargetPath("/does/not/exist/amethyst")).rejects.toThrow();
+  });
+
+  it("rejects the home directory even when auto-approved", async () => {
+    await expect(validateTargetPath(homedir())).rejects.toThrow(/home directory/);
+
+    const config = { approved_paths: [] as string[] };
+    const result = await approveTarget({ config, path: homedir(), autoApprove: true });
+
+    expect(result.approved).toBe(false);
+    expect(result.errorCode).toBe("TARGET_SCOPE_TOO_BROAD");
+    expect(config.approved_paths).toHaveLength(0);
   });
 
   it("remembers explicit non-interactive approval per real path", async () => {

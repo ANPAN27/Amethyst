@@ -315,7 +315,7 @@ Durable Postgres buckets, keyed by user (or IP for unauthenticated pairing):
 | `graph:sync` | 10 / min |
 | `credits:checkout` | 10 / hour |
 | `companion:targets` | 30 / hour |
-| `companion:claim` | 240 / hour |
+| `companion:claim` | 3600 / hour |
 | `companion:progress` | 600 / hour |
 | `companion:artifact` | 120 / hour |
 | `companion:result` | 120 / hour |

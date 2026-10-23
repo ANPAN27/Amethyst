@@ -182,6 +182,8 @@ Recommended:
 - JavaScript folders containing `node_modules`, `.next`, `.git`, or similar
   dependency/build directories are analyzed from a temporary source-only
   snapshot. The job summary records `analysis_scope` and excluded directories.
+  The home directory is refused, and a bounded pre-copy inventory rejects
+  targets above 25,000 retained files or 2 GiB before any staging copy starts.
 - Revoke the companion with `amethyst-companion revoke` if the machine
   is retired.
 
@@ -195,6 +197,8 @@ Companion environment variables:
 | `AMETHYST_CONFIG` | `~/.amethyst/companion.json` | Config path |
 | `AMETHYST_JOB_TIMEOUT_MS` | `900000` | Per-job timeout |
 | `AMETHYST_MAX_ARTIFACT_BYTES` | `26214400` | Local artifact cap |
+| `AMETHYST_MAX_STAGE_FILES` | `25000` | Maximum retained files before staging |
+| `AMETHYST_MAX_STAGE_BYTES` | `2147483648` | Maximum retained bytes before staging |
 | `AMETHYST_AUTO_APPROVE` | unset | `1` auto-approves targets |
 | `AMETHYST_ALLOW_INSECURE_HTTP` | unset | `1` allows non-local HTTP |
 | `AMETHYST_APP_DIR` | auto-detected | Repository path refused as an analysis target |
