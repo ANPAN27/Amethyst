@@ -172,3 +172,15 @@ export function getCreditProduct(productId: string): CreditProduct | null {
   const products = getCreditProducts();
   return products[productId] ?? null;
 }
+
+export function dodoConfigured(): boolean {
+  try {
+    return Boolean(
+      optional("DODO_PAYMENTS_API_KEY") &&
+        optional("DODO_PAYMENTS_WEBHOOK_KEY") &&
+        Object.keys(getCreditProducts()).length > 0,
+    );
+  } catch {
+    return false;
+  }
+}

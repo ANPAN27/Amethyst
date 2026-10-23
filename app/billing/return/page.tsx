@@ -11,8 +11,9 @@ export default function BillingReturnPage() {
         <div className="eyebrow">Billing / return</div>
         <h1>Checkout returned.</h1>
         <p>
-          This page does not grant credits. The signed Dodo Payments webhook is the only event that
-          can add credits, and it is processed idempotently on the server.
+          This page does not grant credits, and a success parameter is never treated as proof of
+          payment. If the payment succeeded, the signed Dodo Payments webhook will add credits
+          idempotently on the server. If it failed or was canceled, no credits are added.
         </p>
         <div className="notice notice-neutral" style={{ marginTop: 18 }}>
           <IconClock className="notice-icon" size={16} />

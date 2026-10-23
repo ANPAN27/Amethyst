@@ -70,6 +70,7 @@ const STATUS_LABELS: Record<string, string> = {
   active: "Active",
   revoked: "Revoked",
   pending: "Pending",
+  refunded: "Refunded",
   skipped: "Skipped",
   observed: "Observed",
   verified_relationship: "Verified relationship",
@@ -103,9 +104,22 @@ export function statusLabel(status: string): string {
 export function statusTone(status: string): StatusTone {
   if (["succeeded", "active", "evidence"].includes(status)) return "success";
   if (["failed", "revoked", "danger", "insufficient"].includes(status)) return "danger";
-  if (["queued", "claimed", "partial", "pending"].includes(status)) return "warning";
+  if (["queued", "claimed", "partial", "pending", "refunded"].includes(status)) return "warning";
   if (status === "running") return "live";
   return "neutral";
+}
+
+export function formatMoney(amount: number | null, currency: string | null): string {
+  if (amount === null) return "—";
+  const code = currency?.toUpperCase() || "USD";
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: code,
+    }).format(amount / 100);
+  } catch {
+    return `${(amount / 100).toFixed(2)} ${code}`;
+  }
 }
 
 export function classTone(value: string): StatusTone {

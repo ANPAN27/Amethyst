@@ -129,14 +129,19 @@ function AddTargetDialog({
           </div>
         </div>
         <div className="stack-sm">
-          <span className="label">1. Prepare the companion (first time only)</span>
+          <span className="label">1. One-time setup / Amethyst repository only</span>
           <div className="command-line">{setupCommand}</div>
           <div className="row" style={{ marginTop: 6 }}>
             <CopyButton value={setupCommand} label="Copy setup" />
           </div>
+          <p className="muted small">
+            Run this from a clone of the Amethyst repository, not from the target project.{" "}
+            <code>companion:setup</code> is an Amethyst package script and is not available inside
+            other repositories.
+          </p>
         </div>
         <div className="stack-sm">
-          <span className="label">2. Select the target on that machine</span>
+          <span className="label">2. Select the target / any directory, after setup</span>
           <div className="command-line">{selectCommand}</div>
           <div className="row" style={{ marginTop: 6 }}>
             <CopyButton value={selectCommand} label="Copy command" />
@@ -145,7 +150,7 @@ function AddTargetDialog({
             Run this from any directory after setup. It opens a native file chooser, validates the
             path locally, records explicit approval, and registers the target. On Ubuntu install{" "}
             <code>zenity</code> if no picker is available; non-interactive runs can pass{" "}
-            <code>--path</code>.
+            <code>--path /absolute/path</code>.
           </p>
         </div>
         <div className="notice notice-neutral">

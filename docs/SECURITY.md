@@ -66,6 +66,11 @@ the service role.
   same payment cannot double-credit.
 - The handler re-resolves the checkout and the server-side product mapping. It
   never trusts a credit amount from the webhook.
+- The checkout stores the Dodo product price/currency server-side. Successful
+  payments must match the product, currency, and at least the expected amount.
+- Payment receipts (`invoice_url`) and payment method metadata are stored only
+  from the verified webhook payload and are rendered as external links with
+  `rel="noreferrer"`.
 - The return URL / success page is cosmetic. Credits are never granted from a
   redirect.
 

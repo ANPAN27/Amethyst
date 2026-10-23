@@ -86,7 +86,9 @@ Paginated append-only ledger. `limit` 1–200 (default 50).
 Creates a Dodo checkout session. The product → credit amount mapping is
 server-side (`DODO_PRODUCT_CREDITS`); the client cannot choose credits.
 Returns `201 { data: { checkout: { checkout_url, provider_session_id, product_id, credits } } }`.
-Credits are granted only after a verified `payment.succeeded` webhook.
+Credits are granted only after a verified `payment.succeeded` webhook. The
+`/usage` page shows the resulting `payments` rows in purchase history and the
+ledger entries in recent transactions.
 
 ## Projects
 
@@ -289,9 +291,10 @@ the timestamp must be within 5 minutes. Verified `payment.succeeded` events:
 1. deduplicate by webhook id (`webhook_events`),
 2. resolve the checkout by metadata or provider session id,
 3. re-check the server-side product → credit mapping,
-4. upsert the payment,
-5. grant credits with idempotency key `dodo:payment:<payment_id>`,
-6. mark the checkout completed and the event processed.
+4. validate the payment product, currency, and amount against the checkout,
+5. upsert the payment,
+6. grant credits with idempotency key `dodo:payment:<payment_id>`,
+7. mark the checkout completed and the event processed.
 
 Duplicate webhook ids and duplicate payments return success without a second
 grant. Permanent data errors are acknowledged so Dodo stops retrying; transient

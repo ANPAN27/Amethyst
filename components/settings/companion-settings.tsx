@@ -71,8 +71,11 @@ export function CompanionSettings({ companions }: { companions: CompanionRow[] }
   }
 
   const setupCommand = "cd /path/to/amethyst && npm run companion:setup";
-  const command = `amethyst-companion pair --server ${origin || "<your-amethyst-origin>"} --code ${pairing?.code ?? "<code>"}`;
+  const pairCommand = `amethyst-companion pair --server ${origin || "<your-amethyst-origin>"} --code ${pairing?.code ?? "<code>"}`;
+  const selectCommand = "amethyst-companion select --project <project-id> --kind javascript_application";
   const runCommand = "amethyst-companion run";
+  const bashPathCommand = `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc`;
+  const bashReloadCommand = "source ~/.bashrc";
 
   return (
     <>
@@ -96,27 +99,54 @@ export function CompanionSettings({ companions }: { companions: CompanionRow[] }
               </div>
               <div className="pairing-code" style={{ marginTop: 10 }}>{pairing.code}</div>
               <p className="muted small" style={{ marginTop: 8 }}>
-                On the authorized analysis machine, run the setup from the Amethyst repository
-                root. It builds the CLI and links <code>amethyst-companion</code> into{" "}
-                <code>~/.local/bin</code>, so the remaining commands work from any directory. The
-                code is single-use and short-lived.
+                Run the one-time setup on the authorized analysis machine from a clone of the
+                Amethyst repository. <code>companion:setup</code> is an Amethyst package script; it
+                does not exist inside the project you want to analyze. The setup builds the CLI and
+                installs a stable launcher under <code>~/.local/bin</code>, so the remaining
+                commands work from any directory. The pairing code is single-use and short-lived.
               </p>
               <span className="label" style={{ display: "block", marginTop: 10 }}>
-                1. Prepare (first time only)
+                1. One-time setup / Amethyst repository only
               </span>
               <div className="command-line">{setupCommand}</div>
               <span className="label" style={{ display: "block", marginTop: 10 }}>
-                2. Pair with this code
+                2. Pair / any directory, after setup
               </span>
-              <div className="command-line">{command}</div>
+              <div className="command-line">{pairCommand}</div>
               <div className="row" style={{ marginTop: 9 }}>
                 <CopyButton value={pairing.code} label="Copy code" />
-                <CopyButton value={`${setupCommand}\n${command}`} label="Copy commands" />
+                <CopyButton value={`${setupCommand}\n${pairCommand}`} label="Copy setup + pair" />
+              </div>
+              <span className="label" style={{ display: "block", marginTop: 10 }}>
+                3. Select a target / any directory, after pairing
+              </span>
+              <div className="command-line">{selectCommand}</div>
+              <p className="muted small" style={{ marginTop: 8 }}>
+                Replace <code>&lt;project-id&gt;</code> with the project that should own the target.
+                The picker opens on the companion machine. For a known absolute path, append{" "}
+                <code>--path /absolute/path</code>. Install <code>zenity</code> on Ubuntu if no
+                native picker is available.
+              </p>
+              <span className="label" style={{ display: "block", marginTop: 10 }}>
+                4. Start the worker / any directory, after selecting
+              </span>
+              <div className="command-line">{runCommand}</div>
+              <div className="row" style={{ marginTop: 9 }}>
+                <CopyButton
+                  value={`${selectCommand}\n${runCommand}`}
+                  label="Copy select + run"
+                />
               </div>
               <p className="muted small" style={{ marginTop: 8 }}>
-                Keep <code>{runCommand}</code> running to claim analysis jobs. Select local targets
-                from a project&apos;s Targets tab; the companion opens a native picker on that
-                machine. If the command is not found, add <code>~/.local/bin</code> to your PATH.
+                Keep <code>{runCommand}</code> running to claim analysis jobs. If{" "}
+                <code>amethyst-companion</code> is not found, <code>~/.local/bin</code> is missing
+                from PATH. Add it for bash:
+              </p>
+              <div className="command-line">{bashPathCommand}</div>
+              <div className="command-line">{bashReloadCommand}</div>
+              <p className="muted small" style={{ marginTop: 8 }}>
+                For zsh, use <code>~/.zshrc</code> instead. The launcher also works directly as{" "}
+                <code>~/.local/bin/amethyst-companion --help</code> without changing PATH.
               </p>
             </div>
           </div>

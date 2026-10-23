@@ -3,7 +3,7 @@ import "server-only";
 import { cache } from "react";
 import type { User } from "@supabase/supabase-js";
 import { createSupabaseServerClient, hasSupabaseConfig } from "@/lib/supabase/server";
-import { getCreditProducts, serverConfig } from "@/lib/config";
+import { dodoConfigured, getCreditProducts, serverConfig } from "@/lib/config";
 import type {
   ArtifactRow,
   AiProjectOption,
@@ -14,6 +14,7 @@ import type {
   FindingWithProject,
   JobRow,
   JobWithProject,
+  PaymentRow,
   ProjectListItem,
   ProjectPageData,
   ProjectSummary,
@@ -433,7 +434,7 @@ export async function getFindingData(userId: string, findingId: string) {
 
 export async function getUsageData(userId: string) {
   const supabase = await currentClient();
-  const [{ data: account }, { data: transactions }] = await Promise.all([
+  const [{ data: account }, { data: transactions }, { data: payments }] = await Promise.all([
     supabase
       .from("credit_accounts")
       .select("available, reserved")
@@ -443,6 +444,14 @@ export async function getUsageData(userId: string) {
       .from("credit_transactions")
       .select(
         "id, kind, amount, delta, balance_after, reference_type, reference_id, created_at",
+      )
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(25),
+    supabase
+      .from("payments")
+      .select(
+        "id, provider, provider_payment_id, product_id, credits, amount, currency, status, metadata, created_at",
       )
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
@@ -465,12 +474,9 @@ export async function getUsageData(userId: string) {
   return {
     credits: { available, reserved, total: available + reserved } as CreditBalance,
     transactions: (transactions ?? []) as CreditTransaction[],
+    payments: (payments ?? []) as PaymentRow[],
     products,
-    paymentsConfigured: Boolean(
-      process.env.DODO_PAYMENTS_API_KEY?.trim() &&
-        process.env.DODO_PAYMENTS_WEBHOOK_KEY?.trim() &&
-        products.length > 0,
-    ),
+    paymentsConfigured: dodoConfigured(),
     chatCost: serverConfig.credits.aiChat,
     codegenCost: serverConfig.credits.codegen,
   };

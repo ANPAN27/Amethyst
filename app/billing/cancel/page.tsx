@@ -11,8 +11,9 @@ export default function BillingCancelPage() {
         <div className="eyebrow">Billing / canceled</div>
         <h1>Checkout canceled.</h1>
         <p>
-          No payment was taken and no credits were added. You can start a new checkout from the
-          usage page at any time.
+          No credits were added by this redirect. If a payment was actually completed before you
+          canceled, the signed Dodo webhook remains authoritative. You can start a new checkout
+          from the usage page at any time.
         </p>
         <div className="error-card-actions">
           <Link className="btn btn-primary" href="/usage">

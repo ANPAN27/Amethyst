@@ -80,14 +80,31 @@ production setup.
 
 ## Quick start (companion)
 
-From the Amethyst repository root:
+Run this once from the Amethyst repository root, not from the project you want
+to analyze. `companion:setup` is an Amethyst package script and does not exist
+inside other repositories.
 
 ```bash
+cd /path/to/amethyst
 npm run companion:setup
 ```
 
-That builds the CLI and links `amethyst-companion` into `~/.local/bin`, so the
-remaining commands work from any directory:
+The setup builds the companion, installs a self-contained copy under
+`~/.local/share/amethyst-companion`, and installs the
+`~/.local/bin/amethyst-companion` launcher. The launcher resolves the installed
+files by installation path, so the commands below work from any current
+directory. Re-run setup after updating the Amethyst repository.
+
+```bash
+# If the command is not found, add ~/.local/bin to your shell PATH:
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+# Or run it directly without changing PATH:
+~/.local/bin/amethyst-companion --help
+```
+
+Then, from any directory:
 
 ```bash
 # Create a one-time pairing code in Settings, then:

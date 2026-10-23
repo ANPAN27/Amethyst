@@ -20,10 +20,13 @@ Migrations:
 | `20261019125911_graph_payload_and_finalize` | Stored graph payload + 12-argument `finalize_job` |
 | `20261019131416_credit_accounting_fix` | Correct available-balance on commit; safe idempotent grant |
 | `20261019131809_privilege_and_index_hardening` | Revoke trigger-function EXECUTE; add FK covering indexes |
+| `20261020181432_revoke_anon_select` | Revoke anonymous table access and default grants |
+| `20261023121717_harden_dodo_checkout_credits` | Store expected Dodo price/currency; serialize grants by idempotency key |
 
-The same migrations were applied to the development project through the
-Supabase MCP; the local filenames use the resulting migration versions so
-`db push` can reconcile history.
+The baseline migrations through `20261020181432` were applied to the
+development project through the Supabase MCP. The Dodo hardening migration
+`20261023121717` is now applied as well, so `checkout_sessions.expected_amount`
+and `checkout_sessions.expected_currency` exist.
 
 3. Confirm the private bucket `analysis-artifacts` exists with a 50 MB cap and
    JSON-only MIME type. Do not add public read policies.
@@ -87,27 +90,48 @@ serverless function.
 
 ## 4. Dodo Payments
 
-1. Create the products in Dodo.
+The test-mode account has three one-time USD products:
+
+| Product | Credits | Price |
+| --- | --- | --- |
+| Amethyst Credits — 100 | 100 | $5.00 |
+| Amethyst Credits — 500 | 500 | $20.00 |
+| Amethyst Credits — 1000 | 1000 | $35.00 |
+
+Their product ids are mapped in `DODO_PRODUCT_CREDITS` in `.env.local`.
+
+1. Create one-time-price products in Dodo (or reuse the test-mode products
+   above).
 2. Set `DODO_PRODUCT_CREDITS` to the exact product ids and intended credits.
-3. Configure the webhook endpoint:
+   The checkout API reads the authoritative price and currency from Dodo and
+   stores them on the checkout session for webhook validation.
+3. The test-mode webhook endpoint is configured as:
 
 ```
-POST https://<your-origin>/api/v1/webhooks/dodo
+POST https://amethyst-rose-nine.vercel.app/api/v1/webhooks/dodo
 ```
 
-Subscribe at least to `payment.succeeded`. Use the webhook signing secret as
-`DODO_PAYMENTS_WEBHOOK_KEY`.
+It is subscribed to `payment.succeeded`. Use the webhook signing secret as
+`DODO_PAYMENTS_WEBHOOK_KEY`. The endpoint must run the same code and have the
+same server environment as the app; the Vercel deployment currently reports
+`dodo: false` from `/api/v1/health` until its environment variables are set.
 4. Set `APP_URL` to the public origin so checkout returns to
-   `/billing/return` (cancel goes to `/billing/cancel`).
+   `/billing/return` (cancel goes to `/billing/cancel`). Local development can
+   use `http://localhost:3000`, but Dodo's servers cannot reach a localhost
+   webhook.
 5. Send a test event from Dodo and verify:
    - `webhook_events.status = 'processed'`
    - one `payments` row
    - one `credit_transactions` row with `reference_id = payment_id`
    - the account balance increased exactly once
    - replaying the same webhook returns `duplicate` / no new grant
+   - `/usage` shows the payment in purchase history
 
-The checkout API requires a live/sandbox Dodo account. Creating sessions was
-not tested here.
+Checkout previews for all three products and a real test-mode checkout session
+were validated against the Dodo API. The local webhook route also accepted a
+correctly signed test event and rejected an invalid signature. A completed
+payment still requires the configured public deployment (or another public
+origin) to receive Dodo's webhook.
 
 ## 5. AI provider
 
@@ -145,13 +169,28 @@ were not executed against a live instance.
 
 ## 7. Companion rollout
 
-From the Amethyst repository root:
+From the Amethyst repository root, on the machine that will run analysis:
 
 ```bash
+cd /path/to/amethyst
 npm run companion:setup
 ```
 
-This links `amethyst-companion` into `~/.local/bin`. Then, from any directory:
+This script belongs to the Amethyst repository; it is intentionally unavailable
+from analysis targets. It builds the companion, installs a self-contained copy
+under `~/.local/share/amethyst-companion`, and writes the
+`~/.local/bin/amethyst-companion` launcher. Re-run setup after updating the
+repository.
+
+If `amethyst-companion` is not found, add the launcher directory to the shell:
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+For zsh, use `~/.zshrc`. The direct fallback is
+`~/.local/bin/amethyst-companion --help`. Then, from any directory:
 
 ```bash
 amethyst-companion pair --server https://<your-origin> --code <code>

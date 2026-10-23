@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { IconAi, IconCredits, IconShield } from "@/components/icons";
 import { CheckoutButton } from "@/components/usage/checkout-button";
+import { RefreshBalanceButton } from "@/components/usage/refresh-balance-button";
 import {
   Badge,
   ButtonLink,
@@ -12,11 +13,16 @@ import {
   PageHeader,
 } from "@/components/ui/primitives";
 import { getUsageData, getViewer } from "@/lib/server-data";
-import { formatDateTime, pluralize, statusLabel } from "@/lib/ui";
+import { formatDateTime, formatMoney, pluralize, statusLabel, statusTone } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Usage & credits" };
+
+function invoiceUrl(metadata: Record<string, unknown>): string | null {
+  const value = metadata.invoice_url;
+  return typeof value === "string" && /^https?:\/\//i.test(value) ? value : null;
+}
 
 export default async function UsagePage() {
   const viewer = await getViewer();
@@ -33,7 +39,12 @@ export default async function UsagePage() {
   return (
     <div className="page-stack">
       <PageHeader
-        actions={<ButtonLink href="/ai" variant="secondary"><IconAi size={14} /> AI workspace</ButtonLink>}
+        actions={
+          <div className="row" style={{ gap: 8 }}>
+            <RefreshBalanceButton />
+            <ButtonLink href="/ai" variant="secondary"><IconAi size={14} /> AI workspace</ButtonLink>
+          </div>
+        }
         description="Credits are reserved before an operation, committed on success, and released on failure. The ledger is authoritative."
         eyebrow="Account / usage & credits"
         title="Usage & credits"
@@ -160,6 +171,82 @@ export default async function UsagePage() {
           <Link className="btn btn-quiet btn-sm" href="/ai">
             Use credits in AI workspace
           </Link>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Purchase history</h2>
+            <p>Verified Dodo payments. A return URL never creates a purchase.</p>
+          </div>
+          <Badge mono>{data.payments.length} payments</Badge>
+        </div>
+        {data.payments.length === 0 ? (
+          <EmptyState
+            compact
+            description="Completed test-mode or live payments will appear here after the signed webhook is processed."
+            icon={<IconCredits size={20} />}
+            title="No purchases yet"
+          />
+        ) : (
+          <div className="data-table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Credits</th>
+                  <th>Amount</th>
+                  <th>Dodo payment</th>
+                  <th>Receipt</th>
+                  <th>Recorded</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.payments.map((payment) => {
+                  const receipt = invoiceUrl(payment.metadata);
+                  return (
+                    <tr key={payment.id}>
+                      <td>
+                        <Badge tone={statusTone(payment.status)}>{statusLabel(payment.status)}</Badge>
+                      </td>
+                      <td className="mono-cell">
+                        {payment.credits?.toLocaleString() ?? "—"}
+                      </td>
+                      <td className="mono-cell">
+                        {formatMoney(payment.amount, payment.currency)}
+                      </td>
+                      <td className="mono-cell">
+                        {payment.provider_payment_id
+                          ? payment.provider_payment_id.slice(0, 18)
+                          : "—"}
+                      </td>
+                      <td>
+                        {receipt ? (
+                          <a
+                            className="row-link"
+                            href={receipt}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            Invoice
+                          </a>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="mono-cell">{formatDateTime(payment.created_at)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div className="panel-footer">
+          <span className="table-footer-meta">
+            Purchases are written only after signature verification and idempotent credit grants.
+          </span>
         </div>
       </section>
 

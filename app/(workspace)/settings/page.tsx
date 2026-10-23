@@ -144,7 +144,7 @@ export default async function SettingsPage() {
                 </li>
               </ul>
               <div className="command-line" style={{ marginTop: 14 }}>
-                node companion/dist/cli.js run
+                amethyst-companion run
               </div>
             </div>
           </section>

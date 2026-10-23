@@ -8,29 +8,44 @@ It never executes arbitrary commands or shell strings supplied by the website.
 
 ## Build
 
-From the repository root:
+Run the one-time setup from the Amethyst repository root. Do not run
+`npm run companion:setup` from the project you want to analyze: that script is
+defined only by the Amethyst repository.
 
 ```bash
+cd /path/to/amethyst
 npm run companion:setup
 ```
 
-Or from inside `companion/`:
+The setup builds the companion, installs a self-contained copy under
+`~/.local/share/amethyst-companion`, and writes the
+`~/.local/bin/amethyst-companion` launcher. The launcher resolves the installed
+CLI from the installation path, not from `process.cwd()`, so it works in any
+directory. Re-run setup after updating the Amethyst repository.
+
+If `amethyst-companion` is not found, add `~/.local/bin` to your shell:
 
 ```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+For zsh, use `~/.zshrc`. You can also run the launcher directly:
+
+```bash
+~/.local/bin/amethyst-companion --help
+```
+
+For companion development only, build in place with:
+
+```bash
+cd companion
 npm install
 npm run build
+node dist/cli.js --help
 ```
 
-The root setup script also marks `dist/cli.js` executable and links it as
-`amethyst-companion` into `~/.local/bin`. If that directory is not on your
-`PATH`, add it:
-
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-The examples below use the linked command; `node dist/cli.js` works from inside
-this directory.
+The examples below use the installed command from any directory.
 
 ## Pair
 

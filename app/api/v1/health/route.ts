@@ -26,6 +26,11 @@ function present(name: string): boolean {
 export async function GET() {
   const missingRequired = REQUIRED.filter((name) => !present(name));
   const missingOptional = OPTIONAL.filter((name) => !present(name));
+  const dodoEnvironment = process.env.DODO_ENVIRONMENT;
+  const dodoEnvironmentValid =
+    !dodoEnvironment ||
+    dodoEnvironment === "test_mode" ||
+    dodoEnvironment === "live_mode";
 
   return NextResponse.json(
     {
@@ -40,11 +45,18 @@ export async function GET() {
           companion: present("PAIRING_CODE_SECRET") && present("COMPANION_TOKEN_SECRET"),
           ai: present("AI_API_KEY"),
           tigerGraph: present("TIGERGRAPH_URL"),
-          dodo: present("DODO_PAYMENTS_API_KEY") && present("DODO_PAYMENTS_WEBHOOK_KEY"),
+          dodo:
+            present("DODO_PAYMENTS_API_KEY") &&
+            present("DODO_PAYMENTS_WEBHOOK_KEY") &&
+            present("DODO_PRODUCT_CREDITS") &&
+            dodoEnvironmentValid,
         },
         warnings: [
           ...missingRequired.map((name) => `${name} is not set`),
           ...missingOptional.map((name) => `${name} is not set (optional)`),
+          ...(dodoEnvironmentValid
+            ? []
+            : ["DODO_ENVIRONMENT must be test_mode or live_mode"]),
         ],
       },
     },

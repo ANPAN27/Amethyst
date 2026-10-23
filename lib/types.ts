@@ -111,6 +111,19 @@ export type CreditTransaction = {
   created_at: string;
 };
 
+export type PaymentRow = {
+  id: string;
+  provider: string;
+  provider_payment_id: string | null;
+  product_id: string | null;
+  credits: number | null;
+  amount: number | null;
+  currency: string | null;
+  status: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
 export type GraphSyncRow = {
   status: string;
   vertices_upserted: number;
