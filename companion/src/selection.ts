@@ -252,7 +252,7 @@ async function isExecutable(path: string): Promise<boolean> {
   }
 }
 
-async function findPicker(name: string): Promise<string | null> {
+export async function findPickerPath(name: string): Promise<string | null> {
   const pathEntries = (process.env.PATH ?? "").split(":").filter(Boolean);
   const extensions = process.platform === "win32" ? [".exe", ".cmd", ""] : [""];
   for (const entry of pathEntries) {
@@ -264,10 +264,9 @@ async function findPicker(name: string): Promise<string | null> {
   return null;
 }
 
-function pickerInvocation(
-  picker: "zenity" | "kdialog" | "yad",
-  kind: TargetKind,
-): string[] {
+type PickerName = "zenity" | "kdialog" | "yad" | "osascript";
+
+function pickerInvocation(picker: PickerName, kind: TargetKind): string[] {
   const wantsDirectory = kind === "javascript_application";
   const title = `Amethyst: select ${wantsDirectory ? "an application folder" : "a target file"}`;
 
@@ -275,6 +274,14 @@ function pickerInvocation(
     return wantsDirectory
       ? ["--getexistingdirectory", homedir(), "--title", title]
       : ["--getopenfilename", homedir(), "--title", title];
+  }
+  if (picker === "osascript") {
+    return [
+      "-e",
+      wantsDirectory
+        ? `POSIX path of (choose folder with prompt "${title}")`
+        : `POSIX path of (choose file with prompt "${title}")`,
+    ];
   }
   return wantsDirectory
     ? ["--file-selection", "--directory", `--title=${title}`]
@@ -330,9 +337,25 @@ function runPicker(command: string, args: string[]): Promise<{
   });
 }
 
+const PICKERS: readonly PickerName[] =
+  process.platform === "darwin"
+    ? ["osascript"]
+    : ["zenity", "kdialog", "yad"];
+
+export async function detectPicker(): Promise<{
+  name: PickerName;
+  path: string;
+} | null> {
+  for (const picker of PICKERS) {
+    const executable = await findPickerPath(picker);
+    if (executable) return { name: picker, path: executable };
+  }
+  return null;
+}
+
 export async function pickLocalPath(kind: TargetKind): Promise<string | null> {
-  for (const picker of ["zenity", "kdialog", "yad"] as const) {
-    const executable = await findPicker(picker);
+  for (const picker of PICKERS) {
+    const executable = await findPickerPath(picker);
     if (!executable) continue;
     const result = await runPicker(executable, pickerInvocation(picker, kind));
     if (result.code === 0 && result.stdout) return result.stdout;
@@ -343,6 +366,8 @@ export async function pickLocalPath(kind: TargetKind): Promise<string | null> {
   }
 
   throw new Error(
-    "No native folder picker found. Install zenity (sudo apt install zenity) or rerun with --path <absolute path>.",
+    process.platform === "darwin"
+      ? "The macOS folder picker is unavailable. Rerun with --path <absolute path>."
+      : "No native folder picker found. Install zenity (sudo apt install zenity) or rerun with --path <absolute path>.",
   );
 }

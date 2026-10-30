@@ -436,15 +436,98 @@ describe("processDodoWebhook", () => {
     expect(grantCreditsMock).toHaveBeenCalledTimes(1);
   });
 
-  it("ignores non-succeeded events", async () => {
+  it("records failed payment events without granting credits", async () => {
     const payload = paymentPayload({ status: "failed" });
     payload.type = "payment.failed";
     const { db } = setupWebhook();
 
     const result = await processWebhook(payload);
 
-    expect(result.result).toBe("ignored");
+    expect(result.result).toBe("recorded_failed");
     expect(grantCreditsMock).not.toHaveBeenCalled();
+    expect(db.payments?.[0]).toMatchObject({
+      provider_payment_id: "pay_123",
+      status: "failed",
+      user_id: userId,
+    });
+    expect(db.checkout_sessions?.[0]?.status).toBe("failed");
+    expect(db.webhook_events?.[0]?.status).toBe("processed");
+  });
+
+  it("records processing payment events without granting credits", async () => {
+    const payload = paymentPayload({ status: "processing" });
+    payload.type = "payment.processing";
+    const { db } = setupWebhook();
+
+    const result = await processWebhook(payload);
+
+    expect(result.result).toBe("recorded_processing");
+    expect(grantCreditsMock).not.toHaveBeenCalled();
+    expect(db.payments?.[0]).toMatchObject({
+      provider_payment_id: "pay_123",
+      status: "processing",
+      user_id: userId,
+    });
+    expect(db.checkout_sessions?.[0]?.status).toBe("created");
+    expect(db.webhook_events?.[0]?.status).toBe("processed");
+  });
+
+  it("records cancelled payment events and closes the checkout", async () => {
+    const payload = paymentPayload({ status: "cancelled" });
+    payload.type = "payment.cancelled";
+    const { db } = setupWebhook();
+
+    const result = await processWebhook(payload);
+
+    expect(result.result).toBe("recorded_cancelled");
+    expect(grantCreditsMock).not.toHaveBeenCalled();
+    expect(db.payments?.[0]).toMatchObject({
+      provider_payment_id: "pay_123",
+      status: "cancelled",
+      user_id: userId,
+    });
+    expect(db.checkout_sessions?.[0]?.status).toBe("failed");
+    expect(db.webhook_events?.[0]?.status).toBe("processed");
+  });
+
+  it("records refund events against the existing payment", async () => {
+    const { db } = setupWebhook({
+      payments: [
+        {
+          id: "payment-row",
+          provider_payment_id: "pay_123",
+          user_id: userId,
+          checkout_session_id: checkoutId,
+          product_id: "pdt_100",
+          credits: 100,
+          status: "succeeded",
+          metadata: {},
+        },
+      ],
+    });
+
+    const result = await processWebhook({
+      type: "refund.succeeded",
+      data: {
+        payment_id: "pay_123",
+        refund_id: "ref_123",
+        amount: 500,
+        currency: "USD",
+        is_partial: false,
+        reason: "test refund",
+      },
+    });
+
+    expect(result.result).toBe("refunded");
+    expect(grantCreditsMock).not.toHaveBeenCalled();
+    expect(db.payments?.[0]).toMatchObject({
+      status: "refunded",
+      metadata: expect.objectContaining({
+        refund_id: "ref_123",
+        refund_amount: 500,
+        refund_is_partial: false,
+      }),
+    });
     expect(db.webhook_events?.[0]?.status).toBe("processed");
   });
 

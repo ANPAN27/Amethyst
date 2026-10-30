@@ -15,5 +15,5 @@ export async function POST(request: NextRequest) {
     const body = await parseJson(request, checkoutSchema);
     const checkout = await createCreditCheckout(user, body.product_id);
     return jsonOk({ checkout }, 201);
-  });
+  }, "POST /api/v1/credits/checkout");
 }

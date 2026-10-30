@@ -13,7 +13,12 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("[ui] route error", error.digest ?? error.name);
+    console.error("[ui] route error", {
+      name: error.name,
+      message: error.message,
+      digest: error.digest,
+      ...(process.env.NODE_ENV !== "production" ? { stack: error.stack } : {}),
+    });
   }, [error]);
 
   return (

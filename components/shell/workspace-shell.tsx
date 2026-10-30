@@ -15,6 +15,7 @@ import {
   IconLogout,
   IconMenu,
   IconOverview,
+  IconPayments,
   IconProjects,
   IconSettings,
   IconUser,
@@ -81,6 +82,12 @@ const sections: { label: string; items: NavItem[] }[] = [
     label: "Account",
     items: [
       {
+        href: "/payments",
+        label: "Payments",
+        icon: <IconPayments size={16} />,
+        match: (pathname) => pathname.startsWith("/payments"),
+      },
+      {
         href: "/usage",
         label: "Usage & credits",
         icon: <IconCredits size={16} />,
@@ -103,6 +110,7 @@ const ROUTE_LABELS: Record<string, string> = {
   findings: "Findings",
   ai: "AI workspace",
   graph: "Graph",
+  payments: "Payments",
   usage: "Usage & credits",
   settings: "Settings",
 };
@@ -290,7 +298,7 @@ export function WorkspaceShell({
                   </span>
                 </Link>
               ) : null}
-              <Link className="topbar-credit" href="/usage">
+              <Link className="topbar-credit" href="/payments">
                 <IconCredits size={14} />
                 <span>Credits</span>
                 <strong>{credits.available.toLocaleString()}</strong>

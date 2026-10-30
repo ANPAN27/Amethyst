@@ -115,6 +115,7 @@ export type PaymentRow = {
   id: string;
   provider: string;
   provider_payment_id: string | null;
+  checkout_session_id: string | null;
   product_id: string | null;
   credits: number | null;
   amount: number | null;
@@ -122,7 +123,38 @@ export type PaymentRow = {
   status: string;
   metadata: Record<string, unknown>;
   created_at: string;
+  updated_at?: string;
 };
+
+export type PaymentDetail = {
+  payment: PaymentRow;
+  checkout: {
+    id: string;
+    product_id: string;
+    credits: number;
+    expected_amount: number | null;
+    expected_currency: string | null;
+    status: string;
+    created_at: string;
+  } | null;
+  transaction: CreditTransaction | null;
+};
+
+export type CreditPack = {
+  id: string;
+  name: string;
+  description: string | null;
+  credits: number;
+  price: number | null;
+  currency: string | null;
+  displayOrder: number;
+  recommended: boolean;
+  active: boolean;
+  checkoutReady: boolean;
+  unavailableReason: string | null;
+};
+
+export type CreditTransactionFilter = "all" | "added" | "consumed";
 
 export type GraphSyncRow = {
   status: string;

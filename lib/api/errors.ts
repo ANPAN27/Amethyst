@@ -97,13 +97,27 @@ export function toApiError(error: unknown): ApiError {
   return new ApiError(500, "internal_error", "An unexpected error occurred");
 }
 
-export async function withRouteHandler(handler: () => Promise<Response>): Promise<Response> {
+export async function withRouteHandler(
+  handler: () => Promise<Response>,
+  operation = "route",
+): Promise<Response> {
   try {
     return await handler();
   } catch (error) {
     const apiError = toApiError(error);
+    const cause =
+      error instanceof Error
+        ? {
+            name: error.name,
+            code: (error as { code?: string }).code ?? null,
+            message: error.message.slice(0, 300),
+          }
+        : { type: typeof error };
     // Never log request bodies, tokens, pairing codes or provider secrets.
-    console.error(`[api] ${apiError.status} ${apiError.code}: ${apiError.message}`);
+    console.error(
+      `[api] ${operation} ${apiError.status} ${apiError.code}: ${apiError.message}`,
+      cause,
+    );
     return jsonError(apiError);
   }
 }

@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { dodoConfigured, getCreditProduct, getCreditProducts, serverConfig } from "@/lib/config";
+import {
+  dodoConfigured,
+  getCreditProduct,
+  getCreditProducts,
+  paymentConfigurationIssues,
+  serverConfig,
+} from "@/lib/config";
 
 const KEYS = [
   "DODO_PAYMENTS_API_KEY",
@@ -63,5 +69,26 @@ describe("Dodo configuration", () => {
     process.env.DODO_PAYMENTS_API_KEY = "test_api_key";
     process.env.DODO_PAYMENTS_WEBHOOK_KEY = "whsec_test";
     expect(dodoConfigured()).toBe(true);
+  });
+
+  it("reports missing payment configuration names without values", () => {
+    expect(paymentConfigurationIssues()).toEqual([
+      "DODO_PAYMENTS_API_KEY",
+      "DODO_PAYMENTS_WEBHOOK_KEY",
+      "DODO_PRODUCT_CREDITS",
+    ]);
+
+    process.env.DODO_PAYMENTS_API_KEY = "test_api_key";
+    process.env.DODO_PAYMENTS_WEBHOOK_KEY = "whsec_test";
+    process.env.DODO_PRODUCT_CREDITS = JSON.stringify({ pdt_100: { credits: 100 } });
+    expect(paymentConfigurationIssues()).toEqual([]);
+  });
+
+  it("reports invalid product mapping configuration", () => {
+    process.env.DODO_PAYMENTS_API_KEY = "test_api_key";
+    process.env.DODO_PAYMENTS_WEBHOOK_KEY = "whsec_test";
+    process.env.DODO_PRODUCT_CREDITS = "not-json";
+
+    expect(paymentConfigurationIssues()).toEqual(["DODO_PRODUCT_CREDITS (invalid JSON)"]);
   });
 });

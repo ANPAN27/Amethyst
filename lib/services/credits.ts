@@ -9,6 +9,12 @@ export type CreditBalance = {
   total: number;
 };
 
+export type CreditTotals = {
+  purchased: number;
+  consumed: number;
+  entries: number;
+};
+
 export async function getCreditBalance(user: User): Promise<CreditBalance> {
   const { data, error } = await getSupabaseAdmin()
     .from("credit_accounts")
@@ -21,6 +27,26 @@ export async function getCreditBalance(user: User): Promise<CreditBalance> {
   const available = data?.available ?? 0;
   const reserved = data?.reserved ?? 0;
   return { available, reserved, total: available + reserved };
+}
+
+export async function getCreditTotals(userId: string): Promise<CreditTotals> {
+  const { data, error } = await getSupabaseAdmin().rpc("credit_totals", {
+    p_user_id: userId,
+  });
+
+  if (error) {
+    console.error("[credits] credit_totals failed", {
+      code: error.code ?? "unknown",
+      message: error.message ?? "Unknown database error",
+    });
+    throw new Error("Unable to load credit totals");
+  }
+  const result = (data ?? {}) as Partial<CreditTotals>;
+  return {
+    purchased: Number(result.purchased ?? 0),
+    consumed: Number(result.consumed ?? 0),
+    entries: Number(result.entries ?? 0),
+  };
 }
 
 export async function reserveCredits(input: {

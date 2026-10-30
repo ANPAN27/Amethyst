@@ -8,10 +8,15 @@ import {
   Badge,
   Button,
   EmptyState,
-  StatusBadge,
 } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { apiRequest } from "@/lib/client-api";
+import {
+  COMPANION_INSTALL_SCRIPT,
+  COMPANION_VERSION,
+  companionInstallCommands,
+  isCompanionConnected,
+} from "@/lib/companion-install";
 import type { CompanionRow } from "@/lib/types";
 import { formatDateTime, formatClientError, workflowLabel } from "@/lib/ui";
 
@@ -70,87 +75,114 @@ export function CompanionSettings({ companions }: { companions: CompanionRow[] }
     }
   }
 
-  const setupCommand = "cd /path/to/amethyst && npm run companion:setup";
+  const commands = companionInstallCommands(origin, COMPANION_VERSION);
   const pairCommand = `amethyst-companion pair --server ${origin || "<your-amethyst-origin>"} --code ${pairing?.code ?? "<code>"}`;
   const selectCommand = "amethyst-companion select --project <project-id> --kind javascript_application";
   const runCommand = "amethyst-companion run";
+  const doctorCommand = "amethyst-companion doctor";
   const bashPathCommand = `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc`;
   const bashReloadCommand = "source ~/.bashrc";
 
   return (
     <>
-      <section className="panel">
+      <section className="panel" id="companions">
         <div className="panel-header">
           <div>
             <h2>Local companions</h2>
-            <p>Authorized workers that perform inspection on your machine.</p>
+            <p>Install a standalone worker, authorize it, and keep it running.</p>
           </div>
           <Button disabled={busy} onClick={pair} size="sm">
             {busy ? "Generating…" : "Pair companion"}
           </Button>
         </div>
 
-        {pairing ? (
-          <div className="panel-body">
-            <div className="pairing-box">
-              <div className="row spread">
-                <span className="label">One-time pairing code</span>
+        <div className="panel-body">
+          <div className="pairing-box">
+            <div className="row spread">
+              <span className="label">
+                {pairing ? "One-time pairing code" : "Standalone companion"}
+              </span>
+              {pairing ? (
                 <Badge tone="warning" mono>Expires {formatDateTime(pairing.expires_at)}</Badge>
-              </div>
-              <div className="pairing-code" style={{ marginTop: 10 }}>{pairing.code}</div>
-              <p className="muted small" style={{ marginTop: 8 }}>
-                Run the one-time setup on the authorized analysis machine from a clone of the
-                Amethyst repository. <code>companion:setup</code> is an Amethyst package script; it
-                does not exist inside the project you want to analyze. The setup builds the CLI and
-                installs a stable launcher under <code>~/.local/bin</code>, so the remaining
-                commands work from any directory. The pairing code is single-use and short-lived.
-              </p>
-              <span className="label" style={{ display: "block", marginTop: 10 }}>
-                1. One-time setup / Amethyst repository only
-              </span>
-              <div className="command-line">{setupCommand}</div>
-              <span className="label" style={{ display: "block", marginTop: 10 }}>
-                2. Pair / any directory, after setup
-              </span>
-              <div className="command-line">{pairCommand}</div>
-              <div className="row" style={{ marginTop: 9 }}>
-                <CopyButton value={pairing.code} label="Copy code" />
-                <CopyButton value={`${setupCommand}\n${pairCommand}`} label="Copy setup + pair" />
-              </div>
-              <span className="label" style={{ display: "block", marginTop: 10 }}>
-                3. Select a target / any directory, after pairing
-              </span>
-              <div className="command-line">{selectCommand}</div>
-              <p className="muted small" style={{ marginTop: 8 }}>
-                Replace <code>&lt;project-id&gt;</code> with the project that should own the target.
-                The picker opens on the companion machine. For a known absolute path, append{" "}
-                <code>--path /absolute/path</code>. Install <code>zenity</code> on Ubuntu if no
-                native picker is available.
-              </p>
-              <span className="label" style={{ display: "block", marginTop: 10 }}>
-                4. Start the worker / any directory, after selecting
-              </span>
-              <div className="command-line">{runCommand}</div>
-              <div className="row" style={{ marginTop: 9 }}>
-                <CopyButton
-                  value={`${selectCommand}\n${runCommand}`}
-                  label="Copy select + run"
-                />
-              </div>
-              <p className="muted small" style={{ marginTop: 8 }}>
-                Keep <code>{runCommand}</code> running to claim analysis jobs. If{" "}
-                <code>amethyst-companion</code> is not found, <code>~/.local/bin</code> is missing
-                from PATH. Add it for bash:
-              </p>
-              <div className="command-line">{bashPathCommand}</div>
-              <div className="command-line">{bashReloadCommand}</div>
-              <p className="muted small" style={{ marginTop: 8 }}>
-                For zsh, use <code>~/.zshrc</code> instead. The launcher also works directly as{" "}
-                <code>~/.local/bin/amethyst-companion --help</code> without changing PATH.
-              </p>
+              ) : (
+                <Badge mono>v{COMPANION_VERSION}</Badge>
+              )}
             </div>
+            {pairing ? (
+              <>
+                <div className="pairing-code" style={{ marginTop: 10 }}>{pairing.code}</div>
+                <p className="muted small" style={{ marginTop: 8 }}>
+                  This code is single-use and expires after 10 minutes. Complete the pairing command
+                  on the analysis machine before it expires.
+                </p>
+              </>
+            ) : (
+              <p className="muted small" style={{ marginTop: 8 }}>
+                Install the companion on the machine that holds the target, then generate a one-time
+                code with <strong>Pair companion</strong>. No Amethyst source checkout is required.
+              </p>
+            )}
+
+            <span className="label" style={{ display: "block", marginTop: 12 }}>
+              1. Install or upgrade / any directory
+            </span>
+            {commands.downloadCommand ? (
+              <>
+                <div className="command-line">{commands.downloadCommand}</div>
+                <div className="command-line">{commands.installCommand}</div>
+                <p className="muted small" style={{ marginTop: 8 }}>
+                  Installs companion v{COMPANION_VERSION} under{" "}
+                  <code>~/.local/share/amethyst-companion</code> with a launcher in{" "}
+                  <code>~/.local/bin</code>. Ubuntu users need <code>zenity</code> for the native
+                  picker. Installer: <a href={commands.installScriptUrl}>{COMPANION_INSTALL_SCRIPT}</a>.
+                  On Windows, run the POSIX installer inside WSL and use <code>--path</code>.
+                </p>
+              </>
+            ) : (
+              <p className="muted small">Loading the installer URL…</p>
+            )}
+
+            <span className="label" style={{ display: "block", marginTop: 12 }}>
+              2. Pair / after installing
+            </span>
+            <div className="command-line">{pairCommand}</div>
+            <div className="row" style={{ marginTop: 9 }}>
+              {pairing ? <CopyButton value={pairing.code} label="Copy code" /> : null}
+              <CopyButton value={pairCommand} label="Copy pair command" />
+            </div>
+
+            <span className="label" style={{ display: "block", marginTop: 12 }}>
+              3. Select a target / after pairing
+            </span>
+            <div className="command-line">{selectCommand}</div>
+            <p className="muted small" style={{ marginTop: 8 }}>
+              Replace <code>&lt;project-id&gt;</code> with the project that should own the target.
+              The picker opens on the companion machine. For a known absolute path, append{" "}
+              <code>--path /absolute/path</code>.
+            </p>
+
+            <span className="label" style={{ display: "block", marginTop: 12 }}>
+              4. Start the worker / after selecting
+            </span>
+            <div className="command-line">{runCommand}</div>
+            <div className="row" style={{ marginTop: 9 }}>
+              <CopyButton value={`${selectCommand}\n${runCommand}`} label="Copy select + run" />
+              <CopyButton value={doctorCommand} label="Copy doctor" />
+            </div>
+            <p className="muted small" style={{ marginTop: 8 }}>
+              Keep <code>{runCommand}</code> running to claim analysis jobs. Run{" "}
+              <code>{doctorCommand}</code> to check Node.js, configuration, server connectivity, and
+              approved paths. If <code>amethyst-companion</code> is not found, add{" "}
+              <code>~/.local/bin</code> to PATH:
+            </p>
+            <div className="command-line">{bashPathCommand}</div>
+            <div className="command-line">{bashReloadCommand}</div>
+            <p className="muted small" style={{ marginTop: 8 }}>
+              For zsh, use <code>~/.zshrc</code> instead. The launcher also works directly as{" "}
+              <code>~/.local/bin/amethyst-companion --help</code> without changing PATH.
+            </p>
           </div>
-        ) : null}
+        </div>
 
         {companions.length === 0 ? (
           <EmptyState
@@ -166,7 +198,22 @@ export function CompanionSettings({ companions }: { companions: CompanionRow[] }
                   <div className="companion-row-copy">
                     <div className="row" style={{ gap: 8 }}>
                       <strong>{companion.name}</strong>
-                      <StatusBadge status={companion.status} />
+                      <span
+                        className={`status ${
+                          companion.status !== "active"
+                            ? "status-danger"
+                            : isCompanionConnected(companion)
+                              ? "status-success"
+                              : "status-warning"
+                        }`}
+                      >
+                        <span className="status-dot" />
+                        {companion.status !== "active"
+                          ? "Revoked"
+                          : isCompanionConnected(companion)
+                            ? "Connected"
+                            : "Waiting for heartbeat"}
+                      </span>
                     </div>
                     <span>
                       {companion.platform || "unknown platform"}
@@ -206,7 +253,7 @@ export function CompanionSettings({ companions }: { companions: CompanionRow[] }
         <div className="panel-footer" style={{ justifyContent: "flex-start" }}>
           <span className="muted small">
             Pairing codes and bearer tokens are stored as HMAC digests. Revoking a companion deletes
-            its credential immediately.
+            its credential immediately. Connection status is based on a recent companion heartbeat.
           </span>
         </div>
       </section>

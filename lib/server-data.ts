@@ -3,17 +3,28 @@ import "server-only";
 import { cache } from "react";
 import type { User } from "@supabase/supabase-js";
 import { createSupabaseServerClient, hasSupabaseConfig } from "@/lib/supabase/server";
-import { dodoConfigured, getCreditProducts, serverConfig } from "@/lib/config";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import {
+  dodoConfigured,
+  getCreditProducts,
+  paymentConfigurationIssues,
+  serverConfig,
+} from "@/lib/config";
+import { getCreditTotals } from "@/lib/services/credits";
+import { listCreditPacks } from "@/lib/services/credit-packs";
 import type {
   ArtifactRow,
   AiProjectOption,
   CompanionRow,
   CreditBalance,
+  CreditPack,
   CreditTransaction,
+  CreditTransactionFilter,
   FindingRow,
   FindingWithProject,
   JobRow,
   JobWithProject,
+  PaymentDetail,
   PaymentRow,
   ProjectListItem,
   ProjectPageData,
@@ -24,6 +35,16 @@ import type {
 
 function emptyBalance(): CreditBalance {
   return { available: 0, reserved: 0, total: 0 };
+}
+
+type SupabaseOperationError = { code?: string; message?: string };
+
+function dataFailure(operation: string, error: SupabaseOperationError): Error {
+  console.error(`[server-data] ${operation} failed`, {
+    code: error.code ?? "unknown",
+    message: error.message ?? "Unknown database error",
+  });
+  return new Error(`Unable to load ${operation}`);
 }
 
 async function currentClient() {
@@ -48,7 +69,7 @@ export const getViewer = cache(async (): Promise<{
   if (!user) return null;
   const supabase = await currentClient();
 
-  const [{ data: profile }, { data: account }] = await Promise.all([
+  const [profileResult, accountResult] = await Promise.all([
     supabase
       .from("profiles")
       .select("id, email, display_name")
@@ -61,6 +82,11 @@ export const getViewer = cache(async (): Promise<{
       .maybeSingle(),
   ]);
 
+  if (profileResult.error) throw dataFailure("viewer profile", profileResult.error);
+  if (accountResult.error) throw dataFailure("viewer credit balance", accountResult.error);
+
+  const profile = profileResult.data;
+  const account = accountResult.data;
   const available = account?.available ?? 0;
   const reserved = account?.reserved ?? 0;
 
@@ -433,8 +459,8 @@ export async function getFindingData(userId: string, findingId: string) {
 }
 
 export async function getUsageData(userId: string) {
-  const supabase = await currentClient();
-  const [{ data: account }, { data: transactions }, { data: payments }] = await Promise.all([
+  const supabase = getSupabaseAdmin();
+  const [accountResult, transactionsResult, paymentsResult] = await Promise.all([
     supabase
       .from("credit_accounts")
       .select("available, reserved")
@@ -451,12 +477,22 @@ export async function getUsageData(userId: string) {
     supabase
       .from("payments")
       .select(
-        "id, provider, provider_payment_id, product_id, credits, amount, currency, status, metadata, created_at",
+        "id, provider, provider_payment_id, checkout_session_id, product_id, credits, amount, currency, status, metadata, created_at, updated_at",
       )
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(25),
   ]);
+
+  if (accountResult.error) throw dataFailure("usage credit balance", accountResult.error);
+  if (transactionsResult.error) {
+    throw dataFailure("usage credit transactions", transactionsResult.error);
+  }
+  if (paymentsResult.error) throw dataFailure("usage payments", paymentsResult.error);
+
+  const account = accountResult.data;
+  const transactions = transactionsResult.data;
+  const payments = paymentsResult.data;
 
   let products: { id: string; credits: number }[] = [];
   try {
@@ -479,6 +515,211 @@ export async function getUsageData(userId: string) {
     paymentsConfigured: dodoConfigured(),
     chatCost: serverConfig.credits.aiChat,
     codegenCost: serverConfig.credits.codegen,
+  };
+}
+
+const PAYMENT_COLUMNS =
+  "id, provider, provider_payment_id, checkout_session_id, product_id, credits, amount, currency, status, metadata, created_at, updated_at";
+const TRANSACTION_COLUMNS =
+  "id, kind, amount, delta, balance_after, reference_type, reference_id, created_at";
+
+function normalizeTransactionFilter(value: string | undefined): CreditTransactionFilter {
+  return value === "added" || value === "consumed" ? value : "all";
+}
+
+export async function getPaymentsOverview(userId: string): Promise<{
+  credits: CreditBalance;
+  totals: { purchased: number; consumed: number; entries: number };
+  successfulPayments: number;
+  packs: CreditPack[];
+  recentPayments: PaymentRow[];
+  recentTransactions: CreditTransaction[];
+  paymentConfigurationIssues: string[];
+}> {
+  const supabase = getSupabaseAdmin();
+  const [account, totals, successfulPayments, packs, payments, transactions] =
+    await Promise.all([
+      supabase
+        .from("credit_accounts")
+        .select("available, reserved")
+        .eq("user_id", userId)
+        .maybeSingle(),
+      getCreditTotals(userId),
+      supabase
+        .from("payments")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("status", "succeeded"),
+      listCreditPacks(),
+      supabase
+        .from("payments")
+        .select(PAYMENT_COLUMNS)
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(6),
+      supabase
+        .from("credit_transactions")
+        .select(TRANSACTION_COLUMNS)
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(8),
+    ]);
+
+  if (account.error) throw dataFailure("payments overview balance", account.error);
+  if (successfulPayments.error) {
+    throw dataFailure("payments overview success count", successfulPayments.error);
+  }
+  if (payments.error) throw dataFailure("payments overview recent payments", payments.error);
+  if (transactions.error) {
+    throw dataFailure("payments overview recent transactions", transactions.error);
+  }
+
+  const available = account.data?.available ?? 0;
+  const reserved = account.data?.reserved ?? 0;
+
+  return {
+    credits: { available, reserved, total: available + reserved },
+    totals,
+    successfulPayments: successfulPayments.count ?? 0,
+    packs,
+    recentPayments: (payments.data ?? []) as PaymentRow[],
+    recentTransactions: (transactions.data ?? []) as CreditTransaction[],
+    paymentConfigurationIssues: paymentConfigurationIssues(),
+  };
+}
+
+export async function getPaymentHistory(
+  userId: string,
+  limit = 50,
+  offset = 0,
+): Promise<{ payments: PaymentRow[]; total: number; limit: number; offset: number }> {
+  const supabase = getSupabaseAdmin();
+  const [payments, total] = await Promise.all([
+    supabase
+      .from("payments")
+      .select(PAYMENT_COLUMNS)
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1),
+    supabase
+      .from("payments")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId),
+  ]);
+
+  if (payments.error) throw dataFailure("payment history", payments.error);
+  if (total.error) throw dataFailure("payment history count", total.error);
+
+  return {
+    payments: (payments.data ?? []) as PaymentRow[],
+    total: total.count ?? 0,
+    limit,
+    offset,
+  };
+}
+
+export async function getCreditTransactionHistory(
+  userId: string,
+  filter: string | undefined,
+  limit = 50,
+  offset = 0,
+): Promise<{
+  transactions: CreditTransaction[];
+  total: number;
+  filter: CreditTransactionFilter;
+  limit: number;
+  offset: number;
+}> {
+  const normalized = normalizeTransactionFilter(filter);
+  const supabase = getSupabaseAdmin();
+
+  let rowsQuery = supabase
+    .from("credit_transactions")
+    .select(TRANSACTION_COLUMNS)
+    .eq("user_id", userId);
+  let countQuery = supabase
+    .from("credit_transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+
+  if (normalized === "added") {
+    rowsQuery = rowsQuery.gt("delta", 0);
+    countQuery = countQuery.gt("delta", 0);
+  } else if (normalized === "consumed") {
+    rowsQuery = rowsQuery.lt("delta", 0);
+    countQuery = countQuery.lt("delta", 0);
+  }
+
+  const [transactions, total] = await Promise.all([
+    rowsQuery.order("created_at", { ascending: false }).range(offset, offset + limit - 1),
+    countQuery,
+  ]);
+
+  if (transactions.error) {
+    throw dataFailure("credit transaction history", transactions.error);
+  }
+  if (total.error) throw dataFailure("credit transaction history count", total.error);
+
+  return {
+    transactions: (transactions.data ?? []) as CreditTransaction[],
+    total: total.count ?? 0,
+    filter: normalized,
+    limit,
+    offset,
+  };
+}
+
+export async function getPaymentDetail(
+  userId: string,
+  paymentId: string,
+): Promise<PaymentDetail | null> {
+  const supabase = getSupabaseAdmin();
+  const paymentResult = await supabase
+    .from("payments")
+    .select(PAYMENT_COLUMNS)
+    .eq("id", paymentId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (paymentResult.error) throw dataFailure("payment detail", paymentResult.error);
+  if (!paymentResult.data) return null;
+  const typedPayment = paymentResult.data as PaymentRow;
+
+  const [checkout, transaction] = await Promise.all([
+    typedPayment.checkout_session_id
+      ? supabase
+          .from("checkout_sessions")
+          .select(
+            "id, product_id, credits, expected_amount, expected_currency, status, created_at",
+          )
+          .eq("id", typedPayment.checkout_session_id)
+          .eq("user_id", userId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    typedPayment.provider_payment_id
+      ? supabase
+          .from("credit_transactions")
+          .select(TRANSACTION_COLUMNS)
+          .eq("user_id", userId)
+          .eq("reference_type", "purchase")
+          .eq("reference_id", typedPayment.provider_payment_id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  if ("error" in checkout && checkout.error) {
+    throw dataFailure("payment detail checkout", checkout.error);
+  }
+  if ("error" in transaction && transaction.error) {
+    throw dataFailure("payment detail credit transaction", transaction.error);
+  }
+
+  return {
+    payment: typedPayment,
+    checkout: (checkout.data ?? null) as PaymentDetail["checkout"],
+    transaction: (transaction.data ?? null) as CreditTransaction | null,
   };
 }
 

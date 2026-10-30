@@ -1,5 +1,5 @@
-import { cp, lstat, readdir, stat } from "node:fs/promises";
-import { join, relative, sep } from "node:path";
+import { cp, lstat, readdir, realpath, stat } from "node:fs/promises";
+import { isAbsolute, join, relative, sep } from "node:path";
 import { TargetScopeError } from "./target-scope.js";
 
 const EXCLUDED_DIRECTORIES = new Set([
@@ -30,6 +30,42 @@ export type AnalysisScope = {
 
 function containsExcludedDirectory(relativePath: string): boolean {
   return relativePath.split(sep).some((part) => EXCLUDED_DIRECTORIES.has(part));
+}
+
+function isInsideOrEqual(child: string, parent: string): boolean {
+  const rel = relative(parent, child);
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+async function assertSymlinksStayInside(targetPath: string): Promise<void> {
+  const pending = [targetPath];
+
+  while (pending.length > 0) {
+    const directory = pending.pop();
+    if (!directory) continue;
+    const entries = await readdir(directory, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (EXCLUDED_DIRECTORIES.has(entry.name)) continue;
+      const entryPath = join(directory, entry.name);
+      if (entry.isSymbolicLink()) {
+        let resolved: string;
+        try {
+          resolved = await realpath(entryPath);
+        } catch {
+          continue;
+        }
+        if (!isInsideOrEqual(resolved, targetPath)) {
+          throw new TargetScopeError(
+            `Refusing to follow a symlink outside the approved target: ${entryPath}`,
+            "TARGET_SYMLINK_ESCAPE",
+          );
+        }
+        continue;
+      }
+      if (entry.isDirectory()) pending.push(entryPath);
+    }
+  }
 }
 
 async function rootExcludedDirectories(targetPath: string): Promise<string[]> {
@@ -119,6 +155,7 @@ export async function stageJavaScriptTarget(
     return { path: targetPath, staged: false, excluded: [] };
   }
 
+  await assertSymlinksStayInside(targetPath);
   await assertSourceFits(targetPath, stagingLimits(limitOverrides));
 
   const excluded = await rootExcludedDirectories(targetPath);

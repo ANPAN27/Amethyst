@@ -80,20 +80,18 @@ production setup.
 
 ## Quick start (companion)
 
-Run this once from the Amethyst repository root, not from the project you want
-to analyze. `companion:setup` is an Amethyst package script and does not exist
-inside other repositories.
+Install the standalone companion on the machine that holds the target. It does
+not require a clone of this repository.
 
 ```bash
-cd /path/to/amethyst
-npm run companion:setup
+curl -fsSLO "https://<your-origin>/downloads/install-amethyst-companion.sh"
+sh install-amethyst-companion.sh --base-url "https://<your-origin>"
 ```
 
-The setup builds the companion, installs a self-contained copy under
-`~/.local/share/amethyst-companion`, and installs the
-`~/.local/bin/amethyst-companion` launcher. The launcher resolves the installed
-files by installation path, so the commands below work from any current
-directory. Re-run setup after updating the Amethyst repository.
+The installer verifies Node.js 22.19+ and npm, checks the versioned tarball
+checksum, installs under `~/.local/share/amethyst-companion`, and writes the
+`~/.local/bin/amethyst-companion` launcher. Upgrade by rerunning the current
+installer; pairing credentials and approved paths are preserved.
 
 ```bash
 # If the command is not found, add ~/.local/bin to your shell PATH:
@@ -118,14 +116,20 @@ amethyst-companion approve --path /absolute/path
 
 # Keep the worker running:
 amethyst-companion run
+
+# Diagnose Node, configuration, server connectivity, and approved paths:
+amethyst-companion doctor
 ```
 
-`select` opens a native folder/file picker (`zenity`, `kdialog`, or `yad`),
-validates the path locally, records explicit approval, and registers the target
-with the project. Install `zenity` on Ubuntu if no picker is available. For
-automation, `--path /absolute/path` skips the picker. The dashboard's Targets
-tab shows the command for the selected target kind and detects the new target
-automatically.
+`select` opens a native folder/file picker on macOS or Linux (`zenity`,
+`kdialog`, or `yad`), validates the path locally, records explicit approval, and
+registers the target with the project. Install `zenity` on Ubuntu if no picker
+is available. For automation, `--path /absolute/path` skips the picker. The
+dashboard's Targets tab shows the install, pair, select, and run commands for
+the selected target kind and detects the new target automatically.
+
+To uninstall, run the installer with `--uninstall`; add `--purge` to remove the
+local token and approved-path list. Analysis target projects are never deleted.
 
 For JavaScript applications, the companion analyzes a temporary source-only
 snapshot when the selected folder contains `node_modules`, `.next`, `.git`, or
@@ -146,7 +150,7 @@ These commands pass locally:
 ```bash
 npm run typecheck          # server and tests
 npm run lint
-npm test                   # 85 tests: schemas, requests, webhook signatures, normalizer, AI providers, UI helpers, companion safety, selection and staging
+npm test                   # 144 tests: schemas, requests, webhook signatures, normalizer, AI providers, UI helpers, payments, auth flow, standalone install, companion safety, selection and staging
 npm run build              # Next.js production build
 npm run companion:typecheck
 npm run companion:build

@@ -42,7 +42,8 @@ export default async function UsagePage() {
         actions={
           <div className="row" style={{ gap: 8 }}>
             <RefreshBalanceButton />
-            <ButtonLink href="/ai" variant="secondary"><IconAi size={14} /> AI workspace</ButtonLink>
+            <ButtonLink href="/payments" variant="secondary"><IconCredits size={14} /> Payments</ButtonLink>
+            <ButtonLink href="/ai" variant="quiet"><IconAi size={14} /> AI workspace</ButtonLink>
           </div>
         }
         description="Credits are reserved before an operation, committed on success, and released on failure. The ledger is authoritative."

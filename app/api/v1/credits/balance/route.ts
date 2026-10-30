@@ -10,5 +10,5 @@ export async function GET(request: NextRequest) {
     const user = await requireUser(request);
     const balance = await getCreditBalance(user);
     return jsonOk({ balance });
-  });
+  }, "GET /api/v1/credits/balance");
 }

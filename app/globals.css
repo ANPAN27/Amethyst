@@ -4025,3 +4025,209 @@ hr {
   margin: 9px 0 0;
   padding-top: 9px;
 }
+
+/* --------------------------------------------------------------------------
+   Payments dashboard
+   -------------------------------------------------------------------------- */
+
+.payment-pack-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.payment-pack {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.02), transparent 62%),
+    var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 230px;
+  padding: 15px;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease;
+}
+
+.payment-pack:hover {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.03), transparent 62%),
+    var(--panel-hover);
+  border-color: var(--border-strong);
+}
+
+.payment-pack-recommended {
+  border-color: var(--border-strong);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.payment-pack-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.payment-pack-icon {
+  align-items: center;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  width: 30px;
+}
+
+.payment-pack-name {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  min-height: 30px;
+}
+
+.payment-pack-credits {
+  font-family: var(--mono);
+  font-size: 32px;
+  font-weight: 380;
+  letter-spacing: -0.06em;
+  line-height: 1.05;
+  margin-top: 8px;
+}
+
+.payment-pack-unit {
+  color: var(--muted);
+  display: block;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  margin-top: 3px;
+  text-transform: uppercase;
+}
+
+.payment-pack-description {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.payment-pack-footer {
+  align-items: flex-end;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.payment-pack-price {
+  display: block;
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.payment-pack-price-note {
+  color: var(--muted);
+  display: block;
+  font-size: 9px;
+  margin-top: 3px;
+}
+
+.payment-filter-bar {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 16px;
+}
+
+.payment-filter {
+  border: 1px solid transparent;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 5px 9px;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+}
+
+.payment-filter:hover {
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+
+.payment-filter-active {
+  background: var(--panel-hover);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.payment-detail-grid {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.payment-detail-grid > div {
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 0;
+}
+
+.payment-detail-grid > div:nth-child(-n + 2) {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.payment-detail-grid span {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.payment-detail-grid strong {
+  font-size: 12px;
+  font-weight: 450;
+  overflow-wrap: anywhere;
+}
+
+.payment-detail-actions {
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+@media (max-width: 900px) {
+  .payment-pack-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .payment-pack-grid,
+  .payment-detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .payment-detail-grid > div:nth-child(2) {
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+  }
+
+  .payment-pack-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

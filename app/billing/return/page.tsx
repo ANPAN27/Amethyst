@@ -20,14 +20,14 @@ export default function BillingReturnPage() {
           <div className="notice-body">
             <strong>Balance may take a moment to update</strong>
             <span>
-              Wait for webhook processing, then refresh your usage page. A redirect is never treated
+              Wait for webhook processing, then refresh your payments page. A redirect is never treated
               as proof of payment.
             </span>
           </div>
         </div>
         <div className="error-card-actions">
-          <Link className="btn btn-primary" href="/usage">
-            <IconCredits size={14} /> Review balance
+          <Link className="btn btn-primary" href="/payments">
+            <IconCredits size={14} /> Review payments
           </Link>
           <Link className="btn btn-secondary" href="/overview">
             Workspace <IconArrowRight size={13} />

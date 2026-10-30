@@ -148,6 +148,11 @@ export const serverConfig = {
 
 const productSchema = z.object({
   credits: z.number().int().positive().max(10_000_000),
+  name: z.string().trim().min(1).max(120).optional(),
+  description: z.string().trim().max(500).optional(),
+  active: z.boolean().optional(),
+  display_order: z.number().int().min(0).max(100_000).optional(),
+  recommended: z.boolean().optional(),
 });
 
 export type CreditProduct = z.infer<typeof productSchema>;
@@ -183,4 +188,32 @@ export function dodoConfigured(): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Names of missing or invalid payment configuration. Never include values.
+ */
+export function paymentConfigurationIssues(): string[] {
+  const issues: string[] = [];
+  if (!optional("DODO_PAYMENTS_API_KEY")) issues.push("DODO_PAYMENTS_API_KEY");
+  if (!optional("DODO_PAYMENTS_WEBHOOK_KEY")) issues.push("DODO_PAYMENTS_WEBHOOK_KEY");
+
+  const environment = optional("DODO_ENVIRONMENT") ?? "test_mode";
+  if (environment !== "test_mode" && environment !== "live_mode") {
+    issues.push("DODO_ENVIRONMENT");
+  }
+
+  try {
+    if (Object.keys(getCreditProducts()).length === 0) issues.push("DODO_PRODUCT_CREDITS");
+  } catch {
+    issues.push("DODO_PRODUCT_CREDITS (invalid JSON)");
+  }
+
+  try {
+    void publicConfig.appUrl;
+  } catch {
+    issues.push("APP_URL");
+  }
+
+  return issues;
 }

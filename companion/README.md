@@ -6,22 +6,32 @@ submits normalized findings plus a private JSON artifact.
 
 It never executes arbitrary commands or shell strings supplied by the website.
 
-## Build
+## Install or upgrade
 
-Run the one-time setup from the Amethyst repository root. Do not run
-`npm run companion:setup` from the project you want to analyze: that script is
-defined only by the Amethyst repository.
+The recommended installation is the versioned installer served by your
+Amethyst deployment. It does not require an Amethyst source checkout and can be
+run from any directory on the machine that holds the analysis target.
 
 ```bash
-cd /path/to/amethyst
-npm run companion:setup
+curl -fsSLO "https://<your-origin>/downloads/install-amethyst-companion.sh"
+sh install-amethyst-companion.sh --base-url "https://<your-origin>"
 ```
 
-The setup builds the companion, installs a self-contained copy under
-`~/.local/share/amethyst-companion`, and writes the
-`~/.local/bin/amethyst-companion` launcher. The launcher resolves the installed
-CLI from the installation path, not from `process.cwd()`, so it works in any
-directory. Re-run setup after updating the Amethyst repository.
+The installer verifies Node.js 22.19+ and npm, downloads
+`amethyst-companion-<version>.tgz` and its SHA-256 checksum, installs the
+package under `~/.local/share/amethyst-companion`, and writes the
+`~/.local/bin/amethyst-companion` launcher. It never edits shell startup files,
+installs system packages, or exposes a listening port.
+
+Use `--prefix`, `--bin-dir`, or `--tarball` for custom or offline installs:
+
+```bash
+sh install-amethyst-companion.sh --version 0.1.0 --base-url "https://<your-origin>"
+sh install-amethyst-companion.sh --tarball ./amethyst-companion-0.1.0.tgz
+```
+
+Upgrade by running the current installer again. It replaces the program and
+launcher while preserving pairing credentials and approved paths.
 
 If `amethyst-companion` is not found, add `~/.local/bin` to your shell:
 
@@ -36,7 +46,17 @@ For zsh, use `~/.zshrc`. You can also run the launcher directly:
 ~/.local/bin/amethyst-companion --help
 ```
 
-For companion development only, build in place with:
+### Uninstall
+
+```bash
+sh install-amethyst-companion.sh --uninstall
+# Also delete the local token and approved-path list:
+sh install-amethyst-companion.sh --uninstall --purge
+```
+
+Uninstalling never deletes analysis target projects.
+
+### Development from this repository
 
 ```bash
 cd companion
@@ -44,6 +64,10 @@ npm install
 npm run build
 node dist/cli.js --help
 ```
+
+Maintainers create hosted artifacts with `npm run companion:release`. That
+builds and packs the companion into `public/downloads`, writes its SHA-256
+checksum, and renders the installer with the current version.
 
 The examples below use the installed command from any directory.
 
@@ -66,12 +90,12 @@ directory is created with mode `0700`. Override the path with
 amethyst-companion select --project <project-id> --kind javascript_application
 ```
 
-The command opens a native folder/file picker (`zenity`, `kdialog`, or `yad`),
-resolves symlinks, checks readability and target magic bytes, refuses the
-Amethyst repository and filesystem roots, records explicit local approval, and
-registers the target with the server. Install `zenity` on Ubuntu if no picker is
-available. For non-interactive runs, pass `--path /absolute/path`; that flag is
-itself treated as explicit selection.
+The command opens a native folder/file picker on macOS or Linux (`zenity`,
+`kdialog`, or `yad`), resolves symlinks, checks readability and target magic
+bytes, refuses filesystem roots and the home directory, records explicit local
+approval, and registers the target with the server. Install `zenity` on Ubuntu
+if no picker is available. For non-interactive runs, pass
+`--path /absolute/path`; that flag is itself treated as explicit selection.
 
 Kinds: `javascript_application`, `managed_artifact`, `sqlite_database`,
 `go_binary`, `rust_binary`. If `--kind` is omitted for a folder, JavaScript
@@ -130,6 +154,7 @@ Jobs are processed sequentially by one process.
 ```bash
 amethyst-companion select ...  # pick and register a local target
 amethyst-companion status      # companion identity/status
+amethyst-companion doctor      # check Node, config, server, and approved paths
 amethyst-companion revoke      # revoke server credentials and delete local config
 ```
 
@@ -147,7 +172,6 @@ amethyst-companion revoke      # revoke server credentials and delete local conf
 | `AMETHYST_MAX_STAGE_BYTES` | `2147483648` | Maximum retained bytes before staging |
 | `AMETHYST_AUTO_APPROVE` | unset | `1` auto-approves targets |
 | `AMETHYST_ALLOW_INSECURE_HTTP` | unset | `1` allows non-local HTTP |
-| `AMETHYST_APP_DIR` | auto-detected | Repository path refused as a local target |
 
 The server URL must be HTTPS unless it is localhost or the insecure override is
 explicitly set.
@@ -159,10 +183,11 @@ explicitly set.
 - Workflow parameters are allowlisted and passed as separate arguments.
 - Output size cap, process timeout, and JSON parsing.
 - Targets must be absolute, exist, be readable, and be approved locally.
-- Native selection resolves symlinks and rejects filesystem roots, the home
-  directory, and the Amethyst repository.
-- Staging inventories the retained source tree first and fails broad targets
-  before copying any files.
+- Native selection resolves symlinks and rejects filesystem roots and the home
+  directory.
+- Staging inventories the retained source tree first, rejects symlinks that
+  resolve outside the approved target, and fails broad targets before copying
+  any files.
 - Unknown REA output shapes produce an honest "not recognized" finding instead
   of fabricated results.
 - Temporary output files live in an OS temp directory and are removed after the

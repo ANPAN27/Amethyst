@@ -29,7 +29,7 @@ type CheckoutRow = {
 
 let client: DodoPayments | null = null;
 
-function getDodoClient(): DodoPayments {
+export function getDodoClient(): DodoPayments {
   if (client) return client;
   client = new DodoPayments({
     bearerToken: serverConfig.dodo.apiKey,
@@ -40,8 +40,8 @@ function getDodoClient(): DodoPayments {
 
 export async function createCreditCheckout(user: User, productId: string) {
   const product = getCreditProduct(productId);
-  if (!product) {
-    throw new ApiError(400, "invalid_request", "Unknown credit product");
+  if (!product || product.active === false) {
+    throw new ApiError(400, "invalid_request", "Unknown or inactive credit product");
   }
   if (!dodoConfigured()) {
     throw new ApiError(503, "upstream_unavailable", "Payments are not configured");
@@ -155,6 +155,11 @@ const paymentEventSchema = z.object({
       invoice_url: z.string().url().max(2000).optional(),
       payment_method: z.string().max(80).optional(),
       card_last_four: z.string().max(8).optional(),
+      error_code: z.string().max(120).optional().nullable(),
+      error_message: z.string().max(2000).optional().nullable(),
+      refund_id: z.string().max(200).optional(),
+      is_partial: z.boolean().optional(),
+      reason: z.string().max(2000).optional().nullable(),
       metadata: z.record(z.unknown()).optional(),
       product_cart: z
         .array(
@@ -220,6 +225,180 @@ async function findCheckout(
 }
 
 /**
+ * Resolve the checkout referenced by a verified payment event. Both the
+ * metadata checkout id and the provider checkout id are checked and must agree
+ * when both are present.
+ */
+async function resolveCheckout(
+  metadata: Record<string, unknown>,
+  providerCheckoutId: string | null,
+): Promise<CheckoutRow | null> {
+  const metadataCheckoutId = metadataString(metadata.checkout_session_id);
+  const checkoutByMetadata = metadataCheckoutId
+    ? await findCheckout("id", metadataCheckoutId)
+    : null;
+  if (metadataCheckoutId && !checkoutByMetadata) {
+    throw new PermanentWebhookError("No matching checkout session");
+  }
+
+  const checkoutByProvider = providerCheckoutId
+    ? await findCheckout("provider_session_id", providerCheckoutId)
+    : null;
+
+  if (
+    checkoutByMetadata &&
+    checkoutByProvider &&
+    checkoutByMetadata.id !== checkoutByProvider.id
+  ) {
+    throw new PermanentWebhookError("Checkout identifiers do not match");
+  }
+
+  return checkoutByMetadata ?? checkoutByProvider;
+}
+
+function assertCheckoutMetadata(
+  checkout: CheckoutRow,
+  metadata: Record<string, unknown>,
+  providerCheckoutId: string | null,
+) {
+  const metadataUserId = metadataString(metadata.user_id);
+  const metadataProductId = metadataString(metadata.product_id);
+  const metadataCredits = metadataString(metadata.credits);
+
+  if (
+    checkout.provider_session_id &&
+    providerCheckoutId &&
+    checkout.provider_session_id !== providerCheckoutId
+  ) {
+    throw new PermanentWebhookError("Provider checkout id does not match");
+  }
+  if (metadataUserId && metadataUserId !== checkout.user_id) {
+    throw new PermanentWebhookError("Checkout user does not match webhook metadata");
+  }
+  if (metadataProductId && metadataProductId !== checkout.product_id) {
+    throw new PermanentWebhookError("Checkout product does not match webhook metadata");
+  }
+  if (metadataCredits && Number(metadataCredits) !== checkout.credits) {
+    throw new PermanentWebhookError("Checkout credits do not match webhook metadata");
+  }
+}
+
+type PaymentLifecycleStatus = "processing" | "failed" | "cancelled";
+
+async function recordPaymentLifecycleEvent(input: {
+  webhookId: string;
+  eventType: string;
+  status: PaymentLifecycleStatus;
+  data: z.infer<typeof paymentEventSchema>["data"];
+}): Promise<{ result: string }> {
+  const admin = getSupabaseAdmin();
+  const paymentId = input.data.payment_id ?? input.data.id;
+  if (!paymentId) throw new PermanentWebhookError("Missing payment id");
+
+  const metadata = input.data.metadata ?? {};
+  const providerCheckoutId = input.data.checkout_session_id ?? null;
+  const checkout = await resolveCheckout(metadata, providerCheckoutId);
+  if (!checkout) {
+    return { result: "ignored_no_checkout" };
+  }
+  assertCheckoutMetadata(checkout, metadata, providerCheckoutId);
+
+  const { data: existingPayment, error: existingPaymentError } = await admin
+    .from("payments")
+    .select("id, user_id, status, metadata")
+    .eq("provider_payment_id", paymentId)
+    .maybeSingle();
+
+  if (existingPaymentError) throw existingPaymentError;
+  if (existingPayment && existingPayment.user_id !== checkout.user_id) {
+    throw new PermanentWebhookError("Payment is already linked to another user");
+  }
+  if (
+    existingPayment &&
+    (existingPayment.status === "succeeded" || existingPayment.status === "refunded")
+  ) {
+    return { result: "ignored_final_payment" };
+  }
+
+  const totalAmount = input.data.total_amount ?? input.data.amount;
+  const currency = input.data.currency?.toUpperCase() ?? null;
+
+  const { error: paymentError } = await admin.from("payments").upsert(
+    {
+      user_id: checkout.user_id,
+      provider: "dodo",
+      provider_payment_id: paymentId,
+      checkout_session_id: checkout.id,
+      product_id: checkout.product_id,
+      credits: checkout.credits,
+      amount: typeof totalAmount === "number" ? totalAmount : null,
+      currency,
+      status: input.status,
+      metadata: {
+        ...(existingPayment?.metadata ?? {}),
+        last_webhook_id: input.webhookId,
+        last_event_type: input.eventType,
+        provider_checkout_id: providerCheckoutId,
+        error_code: input.data.error_code ?? null,
+        error_message: input.data.error_message ?? null,
+      },
+    },
+    { onConflict: "provider_payment_id" },
+  );
+
+  if (paymentError) throw paymentError;
+
+  if (input.status !== "processing") {
+    const { error: checkoutError } = await admin
+      .from("checkout_sessions")
+      .update({ status: "failed" })
+      .eq("id", checkout.id)
+      .eq("status", "created");
+
+    if (checkoutError) throw checkoutError;
+  }
+
+  return { result: `recorded_${input.status}` };
+}
+
+async function recordRefundEvent(input: {
+  webhookId: string;
+  data: z.infer<typeof paymentEventSchema>["data"];
+}): Promise<{ result: string }> {
+  const paymentId = input.data.payment_id ?? input.data.id;
+  if (!paymentId) throw new PermanentWebhookError("Missing payment id");
+
+  const admin = getSupabaseAdmin();
+  const { data: payment, error } = await admin
+    .from("payments")
+    .select("id, user_id, status, metadata")
+    .eq("provider_payment_id", paymentId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!payment) return { result: "ignored_no_payment" };
+
+  const { error: updateError } = await admin
+    .from("payments")
+    .update({
+      status: "refunded",
+      metadata: {
+        ...(payment.metadata ?? {}),
+        refund_id: input.data.refund_id ?? null,
+        refund_amount: input.data.amount ?? null,
+        refund_currency: input.data.currency ?? null,
+        refund_is_partial: input.data.is_partial ?? false,
+        refund_reason: input.data.reason ?? null,
+        refund_webhook_id: input.webhookId,
+      },
+    })
+    .eq("id", payment.id);
+
+  if (updateError) throw updateError;
+  return { result: "refunded" };
+}
+
+/**
  * Idempotent Dodo webhook processing. Credits are granted exactly once using
  * the provider payment id as the ledger idempotency key.
  */
@@ -266,6 +445,50 @@ export async function processDodoWebhook(input: {
 
     const event = parsed.data;
     const normalizedType = event.type || input.eventType;
+    const providerCheckoutId = event.data.checkout_session_id ?? null;
+    const metadata = event.data.metadata ?? {};
+
+    if (normalizedType === "payment.failed") {
+      const result = await recordPaymentLifecycleEvent({
+        webhookId: input.webhookId,
+        eventType: normalizedType,
+        status: "failed",
+        data: event.data,
+      });
+      await markEvent(input.webhookId, "processed");
+      return result;
+    }
+
+    if (normalizedType === "payment.cancelled") {
+      const result = await recordPaymentLifecycleEvent({
+        webhookId: input.webhookId,
+        eventType: normalizedType,
+        status: "cancelled",
+        data: event.data,
+      });
+      await markEvent(input.webhookId, "processed");
+      return result;
+    }
+
+    if (normalizedType === "payment.processing") {
+      const result = await recordPaymentLifecycleEvent({
+        webhookId: input.webhookId,
+        eventType: normalizedType,
+        status: "processing",
+        data: event.data,
+      });
+      await markEvent(input.webhookId, "processed");
+      return result;
+    }
+
+    if (normalizedType === "refund.succeeded") {
+      const result = await recordRefundEvent({
+        webhookId: input.webhookId,
+        data: event.data,
+      });
+      await markEvent(input.webhookId, "processed");
+      return result;
+    }
 
     if (normalizedType !== "payment.succeeded") {
       await markEvent(input.webhookId, "processed");
@@ -281,67 +504,26 @@ export async function processDodoWebhook(input: {
       return { result: "ignored_status" };
     }
 
-    const metadata = event.data.metadata ?? {};
-    const metadataUserId = metadataString(metadata.user_id);
-    const metadataCheckoutId = metadataString(metadata.checkout_session_id);
-    const metadataProductId = metadataString(metadata.product_id);
-    const metadataCredits = metadataString(metadata.credits);
-    const providerCheckoutId = event.data.checkout_session_id ?? null;
-
-    const checkoutByMetadata = metadataCheckoutId
-      ? await findCheckout("id", metadataCheckoutId)
-      : null;
-    if (metadataCheckoutId && !checkoutByMetadata) {
-      throw new PermanentWebhookError("No matching checkout session");
-    }
-
-    const checkoutByProvider = providerCheckoutId
-      ? await findCheckout("provider_session_id", providerCheckoutId)
-      : null;
-
-    if (
-      checkoutByMetadata &&
-      checkoutByProvider &&
-      checkoutByMetadata.id !== checkoutByProvider.id
-    ) {
-      throw new PermanentWebhookError("Checkout identifiers do not match");
-    }
-
-    const checkout = checkoutByMetadata ?? checkoutByProvider;
+    const checkout = await resolveCheckout(metadata, providerCheckoutId);
     if (!checkout) {
       throw new PermanentWebhookError("No matching checkout session");
     }
+    assertCheckoutMetadata(checkout, metadata, providerCheckoutId);
 
     const { data: checkoutPayments, error: checkoutPaymentsError } = await admin
       .from("payments")
-      .select("provider_payment_id")
+      .select("provider_payment_id, status")
       .eq("checkout_session_id", checkout.id);
 
     if (checkoutPaymentsError) throw checkoutPaymentsError;
     if (
       (checkoutPayments ?? []).some(
-        (payment) => payment.provider_payment_id !== paymentId,
+        (payment) =>
+          payment.provider_payment_id !== paymentId &&
+          payment.status === "succeeded",
       )
     ) {
       throw new PermanentWebhookError("Checkout already has a different payment");
-    }
-
-    if (
-      checkout.provider_session_id &&
-      providerCheckoutId &&
-      checkout.provider_session_id !== providerCheckoutId
-    ) {
-      throw new PermanentWebhookError("Provider checkout id does not match");
-    }
-
-    if (metadataUserId && metadataUserId !== checkout.user_id) {
-      throw new PermanentWebhookError("Checkout user does not match webhook metadata");
-    }
-    if (metadataProductId && metadataProductId !== checkout.product_id) {
-      throw new PermanentWebhookError("Checkout product does not match webhook metadata");
-    }
-    if (metadataCredits && Number(metadataCredits) !== checkout.credits) {
-      throw new PermanentWebhookError("Checkout credits do not match webhook metadata");
     }
 
     const configuredProduct = getCreditProduct(checkout.product_id);

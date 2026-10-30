@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { resolveSignUpOutcome } from "@/lib/auth-flow";
 import { safeNextPath } from "@/lib/ui";
 import { Button, Field, Input, Notice } from "@/components/ui/primitives";
 
@@ -50,12 +51,25 @@ export function AuthForm({ mode, supabaseUrl, supabaseAnonKey, nextPath }: AuthF
       });
       if (signUpError) throw signUpError;
 
-      if (data.session) {
-        window.location.assign(destination);
+      const outcome = resolveSignUpOutcome({
+        session: data.session,
+        destination,
+      });
+
+      if (outcome.kind === "redirect") {
+        // Confirm the browser client persisted the session before leaving the
+        // auth page. Never redirect as authenticated without a session.
+        const { data: current, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError || !current.session) {
+          throw new Error(
+            "Your account was created, but the session could not be established. Sign in to continue.",
+          );
+        }
+        window.location.replace(outcome.destination);
         return;
       }
 
-      setNotice("Account created. Check your inbox to confirm the address, then sign in.");
+      setNotice(outcome.message);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Authentication failed. Try again.");
     } finally {

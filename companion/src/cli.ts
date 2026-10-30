@@ -14,6 +14,7 @@ import { stageJavaScriptTarget } from "./staging.js";
 import { TargetScopeError } from "./target-scope.js";
 import {
   TARGET_KINDS,
+  detectPicker,
   normalizeTargetKind,
   pickLocalPath,
   targetKindLabel,
@@ -42,6 +43,7 @@ Usage:
   amethyst-companion approve --path PATH
   amethyst-companion run [--once] [--interval SECONDS] [--yes]
   amethyst-companion status
+  amethyst-companion doctor
   amethyst-companion revoke
 
 select opens a native folder/file picker on this machine, validates the chosen
@@ -58,7 +60,10 @@ Environment:
   AMETHYST_AUTO_APPROVE=1 Auto-approve target paths (use with care)
 
 The companion only runs allowlisted REA commands. It never executes shell
-strings or arbitrary commands supplied by the website.`);
+strings or arbitrary commands supplied by the website.
+
+Install or upgrade the companion from the download page in Amethyst Settings.
+Run \`doctor\` if pairing, selection, or job claiming is not working.`);
 }
 
 function getFlag(args: string[], name: string): string | undefined {
@@ -429,6 +434,82 @@ async function commandApprove(args: string[]): Promise<void> {
   console.log(`Approved local analysis of ${realPath}.`);
 }
 
+async function commandDoctor(): Promise<void> {
+  let failures = 0;
+  const pass = (message: string) => console.log(`  ok    ${message}`);
+  const warn = (message: string) => console.log(`  warn  ${message}`);
+  const fail = (message: string) => {
+    failures += 1;
+    console.log(`  fail  ${message}`);
+  };
+
+  console.log(`Amethyst companion ${VERSION} doctor`);
+  console.log(`  node  ${process.versions.node} (${platform()}-${process.arch})`);
+
+  const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
+  if (major > 22 || (major === 22 && minor >= 19)) {
+    pass("Node.js meets the 22.19+ requirement");
+  } else {
+    fail("Node.js 22.19 or newer is required");
+  }
+
+  const picker = await detectPicker();
+  if (picker) pass(`Native picker available: ${picker.name}`);
+  else warn("No native picker found; use select --path <absolute path>");
+
+  let config: CompanionConfig;
+  try {
+    config = await loadConfig();
+    pass(`Configuration found at ${configPath()}`);
+  } catch (error) {
+    fail(`Configuration is not ready: ${safeMessage(error)}`);
+    console.log("\nRun `amethyst-companion pair --server URL --code CODE` first.");
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log(`  server ${config.server_url}`);
+  console.log(`  name   ${config.name}`);
+  try {
+    const client = new ApiClient(config.server_url, config.token);
+    await client.me();
+    pass("Server reachable and companion credentials accepted");
+  } catch (error) {
+    if (error instanceof CompanionApiError && error.status === 401) {
+      fail("Server rejected this companion token; revoke and pair again");
+    } else {
+      fail(`Server check failed: ${safeMessage(error)}`);
+    }
+  }
+
+  if (config.approved_paths.length === 0) {
+    warn("No local target paths approved yet; run select or approve");
+  } else {
+    for (const path of config.approved_paths) {
+      try {
+        await stat(path);
+        pass(`Approved target available: ${path}`);
+      } catch {
+        warn(`Approved target is missing: ${path}`);
+      }
+    }
+  }
+
+  if (process.env.REA_BIN) {
+    try {
+      await stat(process.env.REA_BIN);
+      pass(`REA_BIN exists: ${process.env.REA_BIN}`);
+    } catch {
+      fail(`REA_BIN does not exist: ${process.env.REA_BIN}`);
+    }
+  } else {
+    pass("REA will be resolved with npx rea-agents");
+  }
+
+  console.log(failures === 0 ? "\nDoctor found no blocking problems." : `\nDoctor found ${failures} problem(s).`);
+  if (failures > 0) process.exitCode = 1;
+}
+
 async function commandStatus(): Promise<void> {
   const config = await loadConfig();
   const client = new ApiClient(config.server_url, config.token);
@@ -467,6 +548,9 @@ async function main(): Promise<void> {
       return;
     case "status":
       await commandStatus();
+      return;
+    case "doctor":
+      await commandDoctor();
       return;
     case "revoke":
       await commandRevoke();

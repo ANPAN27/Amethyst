@@ -169,18 +169,31 @@ were not executed against a live instance.
 
 ## 7. Companion rollout
 
-From the Amethyst repository root, on the machine that will run analysis:
+The companion is installed from versioned artifacts served by the Amethyst
+deployment. No source checkout is required on the analysis machine.
+
+Generate or refresh the artifacts during release:
 
 ```bash
-cd /path/to/amethyst
-npm run companion:setup
+npm run companion:release
 ```
 
-This script belongs to the Amethyst repository; it is intentionally unavailable
-from analysis targets. It builds the companion, installs a self-contained copy
-under `~/.local/share/amethyst-companion`, and writes the
-`~/.local/bin/amethyst-companion` launcher. Re-run setup after updating the
-repository.
+This builds and packs the companion into `public/downloads`, writes the SHA-256
+checksum, and renders `install-amethyst-companion.sh` with the current version.
+Commit the generated `public/downloads` artifacts or run the release command in
+CI so the deployed web app serves them.
+
+On the machine that will run analysis:
+
+```bash
+curl -fsSLO "https://<your-origin>/downloads/install-amethyst-companion.sh"
+sh install-amethyst-companion.sh --base-url "https://<your-origin>"
+```
+
+The installer checks Node.js 22.19+ and npm, downloads the versioned tarball and
+checksum, installs under `~/.local/share/amethyst-companion`, and writes the
+`~/.local/bin/amethyst-companion` launcher. Upgrade by rerunning the current
+installer; local credentials and approvals are preserved.
 
 If `amethyst-companion` is not found, add the launcher directory to the shell:
 
@@ -198,12 +211,14 @@ amethyst-companion select --project <project-id> --kind javascript_application
 # Only for a target registered from the web:
 amethyst-companion approve --path /absolute/path
 AMETHYST_AUTO_APPROVE=0 amethyst-companion run
+amethyst-companion doctor
 ```
 
-`select` opens a native picker (`zenity`, `kdialog`, or `yad`), validates the
-chosen path on the companion machine, records local approval, and registers the
-target. Install `zenity` on Ubuntu if no picker is installed. Use
-`--path /absolute/path` only for non-interactive runs.
+`select` opens a native picker on macOS or Linux (`zenity`, `kdialog`, or
+`yad`), validates the chosen path on the companion machine, records local
+approval, and registers the target. Install `zenity` on Ubuntu if no picker is
+installed. Use `--path /absolute/path` only for non-interactive runs. Windows
+installations should run the POSIX installer inside WSL and pass `--path`.
 
 Recommended:
 
@@ -221,10 +236,13 @@ Recommended:
 - JavaScript folders containing `node_modules`, `.next`, `.git`, or similar
   dependency/build directories are analyzed from a temporary source-only
   snapshot. The job summary records `analysis_scope` and excluded directories.
-  The home directory is refused, and a bounded pre-copy inventory rejects
-  targets above 25,000 retained files or 2 GiB before any staging copy starts.
+  The home directory is refused, symlinks that resolve outside the approved
+  target are rejected, and a bounded pre-copy inventory rejects targets above
+  25,000 retained files or 2 GiB before any staging copy starts.
 - Revoke the companion with `amethyst-companion revoke` if the machine
   is retired.
+- Remove the program with `install-amethyst-companion.sh --uninstall`; add
+  `--purge` to delete the local token and approved-path list.
 
 Companion environment variables:
 
@@ -240,7 +258,6 @@ Companion environment variables:
 | `AMETHYST_MAX_STAGE_BYTES` | `2147483648` | Maximum retained bytes before staging |
 | `AMETHYST_AUTO_APPROVE` | unset | `1` auto-approves targets |
 | `AMETHYST_ALLOW_INSECURE_HTTP` | unset | `1` allows non-local HTTP |
-| `AMETHYST_APP_DIR` | auto-detected | Repository path refused as an analysis target |
 
 ## 8. End-to-end smoke test
 

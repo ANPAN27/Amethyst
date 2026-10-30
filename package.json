@@ -17,8 +17,8 @@
     "test:watch": "vitest",
     "companion:install": "npm --prefix companion install",
     "companion:build": "npm --prefix companion run build",
-    "companion:setup": "node scripts/setup-companion.mjs",
-    "companion:typecheck": "npm --prefix companion run typecheck"
+    "companion:typecheck": "npm --prefix companion run typecheck",
+    "companion:release": "npm --prefix companion install --no-audit --no-fund && node scripts/build-companion-release.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.7",

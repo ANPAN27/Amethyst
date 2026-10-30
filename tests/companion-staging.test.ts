@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -60,6 +60,32 @@ describe("companion JavaScript analysis scope", () => {
       }),
     ).rejects.toThrow(/too broad/);
     await expect(stat(join(temporary, "source"))).rejects.toThrow();
+  });
+
+  it("rejects symlinks that escape the approved target", async () => {
+    const root = await workspace();
+    const target = join(root, "app");
+    const outside = join(root, "outside.txt");
+    await mkdir(target);
+    await writeFile(join(target, "index.js"), "export {};\n");
+    await writeFile(outside, "secret\n");
+    await symlink(outside, join(target, "escape.txt"));
+
+    await expect(
+      stageJavaScriptTarget("analyze_javascript_application", target, join(root, "temporary")),
+    ).rejects.toMatchObject({ code: "TARGET_SYMLINK_ESCAPE" });
+  });
+
+  it("allows symlinks that stay inside the approved target", async () => {
+    const root = await workspace();
+    const target = join(root, "app");
+    await mkdir(join(target, "src"), { recursive: true });
+    await writeFile(join(target, "src", "index.js"), "export {};\n");
+    await symlink(join(target, "src", "index.js"), join(target, "alias.js"));
+
+    await expect(
+      stageJavaScriptTarget("analyze_javascript_application", target, join(root, "temporary")),
+    ).resolves.toEqual({ path: target, staged: false, excluded: [] });
   });
 
   it("does not count excluded dependency trees toward the staging budget", async () => {

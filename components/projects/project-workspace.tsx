@@ -143,11 +143,11 @@ export function ProjectWorkspace({
               <h2>Analysis targets</h2>
               <p>Local targets selected on the machine that runs your companion.</p>
             </div>
-            <AddTargetButton projectId={project.id} />
+            <AddTargetButton companions={companions} projectId={project.id} />
           </div>
           {targets.length === 0 ? (
             <EmptyState
-              action={<AddTargetButton label="Select first target" projectId={project.id} variant="primary" />}
+              action={<AddTargetButton companions={companions} label="Select first target" projectId={project.id} variant="primary" />}
               description="Use the companion to select a local application folder, database, or binary. The path is validated on that machine."
               icon={<IconFindings size={20} />}
               title="No targets registered"
@@ -276,7 +276,7 @@ function OverviewPanel({
               </li>
             </ul>
             <div className="row" style={{ marginTop: 16 }}>
-              <AddTargetButton projectId={project.id} />
+              <AddTargetButton companions={companions} projectId={project.id} />
               <Button onClick={() => onOpenTab("jobs")} variant="secondary" size="sm">
                 Analyze / inspect jobs <IconArrowRight size={13} />
               </Button>

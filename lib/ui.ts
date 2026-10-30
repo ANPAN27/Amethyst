@@ -70,7 +70,12 @@ const STATUS_LABELS: Record<string, string> = {
   active: "Active",
   revoked: "Revoked",
   pending: "Pending",
+  processing: "Processing",
+  cancelled: "Cancelled",
   refunded: "Refunded",
+  created: "Created",
+  completed: "Completed",
+  expired: "Expired",
   skipped: "Skipped",
   observed: "Observed",
   verified_relationship: "Verified relationship",
@@ -102,11 +107,30 @@ export function statusLabel(status: string): string {
 }
 
 export function statusTone(status: string): StatusTone {
-  if (["succeeded", "active", "evidence"].includes(status)) return "success";
-  if (["failed", "revoked", "danger", "insufficient"].includes(status)) return "danger";
-  if (["queued", "claimed", "partial", "pending", "refunded"].includes(status)) return "warning";
+  if (["succeeded", "active", "evidence", "completed"].includes(status)) return "success";
+  if (["failed", "revoked", "danger", "insufficient", "cancelled", "expired"].includes(status)) {
+    return "danger";
+  }
+  if (["queued", "claimed", "partial", "pending", "processing", "refunded"].includes(status)) {
+    return "warning";
+  }
   if (status === "running") return "live";
   return "neutral";
+}
+
+export function creditTransactionLabel(transaction: {
+  kind: string;
+  delta: number;
+  reference_type: string | null;
+}): string {
+  if (transaction.reference_type === "purchase" || transaction.kind === "purchase") {
+    return "Credit pack purchased";
+  }
+  if (transaction.reference_type === "ai_chat") return "AI analysis";
+  if (transaction.reference_type === "ai_codegen") return "AI code generation";
+  if (transaction.delta > 0) return "Credits added";
+  if (transaction.delta < 0) return "Credits consumed";
+  return statusLabel(transaction.kind);
 }
 
 export function formatMoney(amount: number | null, currency: string | null): string {

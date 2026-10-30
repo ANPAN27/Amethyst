@@ -1,11 +1,12 @@
 import { homedir } from "node:os";
 
 export class TargetScopeError extends Error {
-  readonly code = "TARGET_SCOPE_TOO_BROAD";
+  readonly code: string;
 
-  constructor(message: string) {
+  constructor(message: string, code = "TARGET_SCOPE_TOO_BROAD") {
     super(message);
     this.name = "TargetScopeError";
+    this.code = code;
   }
 }
 

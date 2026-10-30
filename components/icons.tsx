@@ -92,6 +92,17 @@ export function IconCredits(props: IconProps) {
   );
 }
 
+export function IconPayments(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect height="15" rx="2" width="20" x="2" y="5" />
+      <path d="M2 10h20" />
+      <path d="M6 15h4" />
+      <circle cx="17" cy="15" r="1.5" />
+    </Icon>
+  );
+}
+
 export function IconSettings(props: IconProps) {
   return (
     <Icon {...props}>

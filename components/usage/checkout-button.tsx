@@ -7,7 +7,26 @@ import { useToast } from "@/components/ui/toast";
 import { apiRequest } from "@/lib/client-api";
 import { formatClientError, pluralize } from "@/lib/ui";
 
-export function CheckoutButton({ productId, credits }: { productId: string; credits: number }) {
+type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "quiet";
+type ButtonSize = "sm" | "md";
+
+export function CheckoutButton({
+  productId,
+  credits,
+  label,
+  variant = "secondary",
+  size = "sm",
+  className,
+  disabled = false,
+}: {
+  productId: string;
+  credits: number;
+  label?: string;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  className?: string;
+  disabled?: boolean;
+}) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
 
@@ -33,8 +52,14 @@ export function CheckoutButton({ productId, credits }: { productId: string; cred
   }
 
   return (
-    <Button disabled={busy} onClick={start} size="sm" variant="secondary">
-      {busy ? "Opening…" : `Buy ${pluralize(credits, "credit")}`}
+    <Button
+      className={className}
+      disabled={busy || disabled}
+      onClick={start}
+      size={size}
+      variant={variant}
+    >
+      {busy ? "Opening…" : (label ?? `Buy ${pluralize(credits, "credit")}`)}
       <IconArrowRight size={12} />
     </Button>
   );
